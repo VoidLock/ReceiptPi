@@ -158,25 +158,32 @@ class WhiteboardPrinter:
         height = int(round(width * 1.6))
         x_offset_px = int(round(X_OFFSET_MM / 25.4 * PRINTER_DPI))
         y_offset_px = int(round(Y_OFFSET_MM / 25.4 * PRINTER_DPI))
+        logging.info("Alignment test: width=%d, x_offset_px=%d, y_offset_px=%d", width, x_offset_px, y_offset_px)
 
-        canvas = Image.new('RGB', (width, height), color=(255, 255, 255))
+        # Create a larger canvas to preserve offset through image processing
+        canvas_width = width + abs(x_offset_px) * 2
+        canvas = Image.new('RGB', (canvas_width, height), color=(255, 255, 255))
         draw = ImageDraw.Draw(canvas)
+        
+        # Adjust x_offset to account for the larger canvas
+        x_base = abs(x_offset_px)
+        y_base = abs(y_offset_px)
 
         # Border
-        draw.rectangle([0 + x_offset_px, 0 + y_offset_px, width - 1 + x_offset_px, height - 1 + y_offset_px], outline=(0, 0, 0), width=1)
+        draw.rectangle([x_base, y_base, x_base + width - 1, y_base + height - 1], outline=(0, 0, 0), width=1)
 
         # Center lines
-        cx = width // 2 + x_offset_px
-        cy = height // 2 + y_offset_px
-        draw.line([cx, 0 + y_offset_px, cx, height + y_offset_px], fill=(0, 0, 0), width=1)
-        draw.line([0 + x_offset_px, cy, width + x_offset_px, cy], fill=(0, 0, 0), width=1)
+        cx = width // 2 + x_base + x_offset_px
+        cy = height // 2 + y_base + y_offset_px
+        draw.line([cx, y_base, cx, y_base + height], fill=(0, 0, 0), width=2)
+        draw.line([x_base, cy, x_base + width, cy], fill=(0, 0, 0), width=2)
 
         # Tick marks every 10 mm along width
         mm_to_px = PRINTER_DPI / 25.4
         for mm in range(0, int(PAPER_WIDTH_MM) + 1, 10):
-            x = int(round(mm * mm_to_px)) + x_offset_px
-            draw.line([x, 0 + y_offset_px, x, 20 + y_offset_px], fill=(0, 0, 0), width=1)
-            draw.line([x, height - 20 + y_offset_px, x, height + y_offset_px], fill=(0, 0, 0), width=1)
+            x = int(round(mm * mm_to_px)) + x_base
+            draw.line([x, y_base, x, y_base + 20], fill=(0, 0, 0), width=1)
+            draw.line([x, y_base + height - 20, x, y_base + height], fill=(0, 0, 0), width=1)
 
         # Labels
         label = f"W={PAPER_WIDTH_MM}mm DPI={PRINTER_DPI} px={width}"
@@ -184,8 +191,9 @@ class WhiteboardPrinter:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
         except Exception:
             font = ImageFont.load_default()
-        draw.text((10 + x_offset_px, 10 + y_offset_px), "ALIGNMENT TEST", font=font, fill=(0, 0, 0))
-        draw.text((10 + x_offset_px, 35 + y_offset_px), label, font=font, fill=(0, 0, 0))
+        draw.text((x_base + 10, y_base + 10), "ALIGNMENT TEST", font=font, fill=(0, 0, 0))
+        draw.text((x_base + 10, y_base + 35), label, font=font, fill=(0, 0, 0))
+        draw.text((x_base + 10, y_base + 60), f"X_OFFSET_MM={X_OFFSET_MM}", font=font, fill=(0, 0, 0))
 
         return canvas
 
