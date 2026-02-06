@@ -48,30 +48,62 @@ class WhiteboardPrinter:
         """Check if printer is paused."""
         return self._paused
 
-    def connect(self):
-        """Establish USB connection to printer device."""
+    def connect(self, retries=3, retry_delay=0.5):
+        """Establish USB connection to printer device.
+        
+        Args:
+            retries (int): Number of connection attempts (default: 3)
+            retry_delay (float): Delay between retries in seconds (default: 0.5)
+        """
         if self.preview_mode:
             print("📸 Preview mode - no printer connection needed")
             return
         
-        try:
-            if config.PRINTER_PROFILE:
-                self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0, profile=config.PRINTER_PROFILE)
-            else:
-                self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0)
-            # detach kernel driver if active
+        last_error = None
+        for attempt in range(retries):
             try:
-                if self.p.device.is_kernel_driver_active(0):
-                    self.p.device.detach_kernel_driver(0)
-            except Exception:
-                # device/kernel driver info may not be available on some platforms
-                logging.debug("Could not check/detach kernel driver")
-            # Give USB device time to settle after connection
-            time.sleep(0.5)
-            print("🟢 Hardware Linked")
+                if config.PRINTER_PROFILE:
+                    self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0, profile=config.PRINTER_PROFILE)
+                else:
+                    self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0)
+                
+                # detach kernel driver if active
+                try:
+                    if self.p.device.is_kernel_driver_active(0):
+                        self.p.device.detach_kernel_driver(0)
+                except Exception:
+                    # device/kernel driver info may not be available on some platforms
+                    logging.debug("Could not check/detach kernel driver")
+                
+                # Give USB device time to settle after connection
+                time.sleep(0.5)
+                print("🟢 Hardware Linked")
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:
+                    logging.debug(f"Connection attempt {attempt + 1}/{retries} failed, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    continue
+        
+        logging.exception(f"Failed to connect to USB printer after {retries} attempts: {last_error}")
+        self.p = None
+    
+    def is_ready(self):
+        """Check if printer is connected and ready.
+        
+        Returns:
+            bool: True if printer is connected and operational
+        """
+        if self.preview_mode or self.p is None:
+            return False
+        try:
+            # Try to communicate with the device
+            self.p.device.get_active_configuration()
+            return True
         except Exception:
-            logging.exception("Failed to connect to USB printer")
-            self.p = None
+            logging.warning("Printer not ready - device may have been disconnected")
+            return False
 
     def create_layout(self, message, subtext=None, priority="default", payload=None):
         """Create layout with ntfy fields: tags/priority (header), title, divider, message, QR if click present.
@@ -440,58 +472,67 @@ class WhiteboardPrinter:
         draw = ImageDraw.Draw(canvas)
         
         try:
-            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-            font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+            font_medium = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+            font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
         except Exception:
-            font_large = font_small = font_tiny = ImageFont.load_default()
+            font_large = font_medium = font_small = font_tiny = ImageFont.load_default()
         
         # Draw title
         title = "CALIBRATION GRID"
         title_bbox = draw.textbbox((0, 0), title, font=font_large)
         title_x = (full_width - (title_bbox[2] - title_bbox[0])) // 2
-        draw.text((title_x, 10), title, font=font_large, fill=(0, 0, 0))
+        draw.text((title_x, 15), title, font=font_large, fill=(0, 0, 0))
         
-        # Instructions
-        inst1 = "Note the last visible column letter on RIGHT edge"
-        inst2 = "Use coordinates for X_OFFSET_MM and RIGHT_MARGIN_MM"
+        # Instructions - larger and more readable
+        inst1 = "NOTE: Last visible LETTER on RIGHT edge:"
+        inst2 = "Then adjust X_OFFSET_MM and SAFE_MARGIN_MM"
         inst1_bbox = draw.textbbox((0, 0), inst1, font=font_tiny)
         inst2_bbox = draw.textbbox((0, 0), inst2, font=font_tiny)
-        draw.text(((full_width - (inst1_bbox[2] - inst1_bbox[0])) // 2, 45), inst1, font=font_tiny, fill=(0, 0, 0))
-        draw.text(((full_width - (inst2_bbox[2] - inst2_bbox[0])) // 2, 60), inst2, font=font_tiny, fill=(0, 0, 0))
+        draw.text(((full_width - (inst1_bbox[2] - inst1_bbox[0])) // 2, 75), inst1, font=font_tiny, fill=(0, 0, 0))
+        draw.text(((full_width - (inst2_bbox[2] - inst2_bbox[0])) // 2, 105), inst2, font=font_tiny, fill=(0, 0, 0))
         
-        grid_start_y = 80
+        grid_start_y = 150
         
         # Draw horizontal lines every 10mm with row numbers
         for row_mm in range(0, 65, 10):
             y = grid_start_y + int(row_mm * mm_to_px)
-            draw.line([0, y, full_width, y], fill=(150, 150, 150), width=1)
-            # Row label on left
+            draw.line([0, y, full_width, y], fill=(150, 150, 150), width=2)
+            # Row label on left - larger
             row_label = f"{row_mm}mm"
-            draw.text((5, y - 12), row_label, font=font_small, fill=(0, 0, 0))
+            draw.text((8, y - 20), row_label, font=font_small, fill=(0, 0, 0))
         
-        # Draw vertical lines every 5mm with column letters (A-Z)
-        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        # Draw vertical lines every 5mm with column letters (A-Z and beyond)
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ"  # Extended for wider paper
         for col_idx, col_mm in enumerate(range(0, int(config.PAPER_WIDTH_MM) + 1, 5)):
             x = int(col_mm * mm_to_px)
             if x >= full_width:
                 break
             
             # Thicker line every 10mm
-            line_width = 2 if col_mm % 10 == 0 else 1
+            line_width = 3 if col_mm % 10 == 0 else 1
             draw.line([x, grid_start_y, x, height], fill=(100, 100, 100), width=line_width)
             
-            # Column letter at top
+            # Column letter at top - much larger
             if col_idx < len(letters):
                 letter = letters[col_idx]
-                draw.text((x - 5, grid_start_y - 18), letter, font=font_small, fill=(0, 0, 0))
-                # mm value below letter
-                draw.text((x - 8, grid_start_y - 35), f"{col_mm}", font=font_tiny, fill=(100, 100, 100))
+                letter_bbox = draw.textbbox((0, 0), letter, font=font_medium)
+                letter_width = letter_bbox[2] - letter_bbox[0]
+                draw.text((x - letter_width // 2, grid_start_y - 60), letter, font=font_medium, fill=(0, 0, 0))
+                # mm value below letter - still readable
+                mm_text = f"{col_mm}mm"
+                mm_bbox = draw.textbbox((0, 0), mm_text, font=font_tiny)
+                mm_width = mm_bbox[2] - mm_bbox[0]
+                draw.text((x - mm_width // 2, grid_start_y - 30), mm_text, font=font_tiny, fill=(100, 100, 100))
         
         # Draw center line (current paper center)
         center_x = full_width // 2
-        draw.line([center_x, grid_start_y, center_x, height], fill=(255, 0, 0), width=3)
-        draw.text((center_x - 30, grid_start_y + 10), "CENTER", font=font_small, fill=(255, 0, 0))
+        draw.line([center_x, grid_start_y, center_x, height], fill=(255, 0, 0), width=4)
+        center_label = "CENTER"
+        center_bbox = draw.textbbox((0, 0), center_label, font=font_small)
+        center_width = center_bbox[2] - center_bbox[0]
+        draw.text((center_x - center_width // 2, grid_start_y + 20), center_label, font=font_small, fill=(255, 0, 0))
         
         # Draw current safe margins if configured
         safe_margin_px = int(round(config.SAFE_MARGIN_MM * mm_to_px))

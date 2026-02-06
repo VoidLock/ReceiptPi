@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import threading
+import time
 import requests
 
 from PIL import ImageOps, ImageEnhance
@@ -207,31 +208,59 @@ def main():
         print("="*60 + "\n")
         
         wp = WhiteboardPrinter()
-        img = wp.create_calibration_grid()
         
-        try:
-            img_mono = img.convert("L")
-            img_mono = ImageOps.autocontrast(img_mono)
-            img_mono = ImageEnhance.Contrast(img_mono).enhance(config.IMAGE_CONTRAST)
-            img_mono = img_mono.convert("1")
-            
-            if wp.p:
-                if config.IMAGE_IMPLS:
-                    impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
+        # Retry calibration if device not ready
+        max_retries = 3
+        for attempt in range(max_retries):
+            if not wp.is_ready():
+                if attempt < max_retries - 1:
+                    print(f"Printer not ready, retrying ({attempt + 2}/{max_retries})...")
+                    time.sleep(1)
+                    wp.connect()
+                    continue
                 else:
-                    impls = [config.IMAGE_IMPL]
+                    print("ERROR: Could not connect to printer. Please check USB connection and try again.")
+                    sys.exit(1)
+            
+            # Device is ready, proceed with calibration
+            img = wp.create_calibration_grid()
+            
+            try:
+                img_mono = img.convert("L")
+                img_mono = ImageOps.autocontrast(img_mono)
+                img_mono = ImageEnhance.Contrast(img_mono).enhance(config.IMAGE_CONTRAST)
+                img_mono = img_mono.convert("1")
                 
-                for impl in impls:
+                if wp.p:
+                    if config.IMAGE_IMPLS:
+                        impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
+                    else:
+                        impls = [config.IMAGE_IMPL]
+                    
+                    for impl in impls:
+                        try:
+                            wp.p.image(img_mono, impl=impl)
+                            break
+                        except TypeError:
+                            wp.p.image(img_mono)
+                            break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logging.warning(f"Calibration attempt {attempt + 1} failed: {e}, retrying...")
+                    wp.p = None
+                    continue
+                else:
+                    logging.error(f"Calibration failed after {max_retries} attempts: {e}")
+                    raise
+            finally:
+                if wp.p and wp.is_ready():
                     try:
-                        wp.p.image(img_mono, impl=impl)
-                        break
-                    except TypeError:
-                        wp.p.image(img_mono)
-                        break
-        finally:
-            if wp.p:
-                wp.p.text("\n\n\n\n")
-                wp.p.cut()
+                        wp.p.text("\n\n\n\n")
+                        wp.p.cut()
+                    except Exception as e:
+                        logging.warning(f"Could not send final cut command: {e}")
+            
+            break  # Success, exit retry loop
         
         print("\nCalibration grid printed!")
         print("\nBased on what you see:")
