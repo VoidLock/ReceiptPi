@@ -76,9 +76,6 @@ class WhiteboardPrinter:
         font_main_size = 70
         font_sub_size = 35
 
-        canvas = Image.new('RGB', (width, 1000), color=(255, 255, 255))
-        draw = ImageDraw.Draw(canvas)
-
         try:
             font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_main_size)
             font_reg = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_sub_size)
@@ -86,38 +83,67 @@ class WhiteboardPrinter:
             logging.warning("Could not load TTF fonts; falling back to default font")
             font_bold = font_reg = ImageFont.load_default()
 
-        y = 30
-        # 1. Lightning Bolt Symbol (Centered)
-        draw.text(((width - 40)//2, y), "⚡", font=font_bold, fill=(0, 0, 0))
-        y += 90
-
         # 2. Main Message (Heavy Wrap for Size)
         # enforce message caps to avoid unbounded image sizes
         if len(message) > MAX_MESSAGE_LENGTH:
             message = message[:MAX_MESSAGE_LENGTH-3] + "..."
 
-        lines = textwrap.wrap(message, width=10)[:MAX_LINES] # 10 chars max keeps it huge
-        if len(textwrap.wrap(message, width=10)) > MAX_LINES:
-            if lines:
-                lines[-1] = (lines[-1][:max(0, len(lines[-1]) - 3)] + "...")
+        wrapped = textwrap.wrap(message, width=10)
+        lines = wrapped[:MAX_LINES]  # 10 chars max keeps it huge
+        if len(wrapped) > MAX_LINES and lines:
+            lines[-1] = (lines[-1][:max(0, len(lines[-1]) - 3)] + "...")
+
+        # Measure text sizes to build a tight canvas
+        sample_main_bbox = font_bold.getbbox("Ag")
+        main_line_height = sample_main_bbox[3] - sample_main_bbox[1]
+        sample_sub_bbox = font_reg.getbbox("Ag")
+        sub_line_height = sample_sub_bbox[3] - sample_sub_bbox[1]
+        bolt_bbox = font_bold.getbbox("⚡")
+        bolt_height = bolt_bbox[3] - bolt_bbox[1]
+
+        top_pad = 20
+        bolt_gap = 15
+        line_gap = 10
+        divider_gap = 15
+        date_gap = 25
+        bottom_pad = 20
+
+        lines_height = (len(lines) * main_line_height) + (max(0, len(lines) - 1) * line_gap)
+        total_height = (
+            top_pad +
+            bolt_height + bolt_gap +
+            lines_height +
+            divider_gap + 3 + date_gap +
+            sub_line_height +
+            bottom_pad
+        )
+
+        canvas = Image.new('RGB', (width, total_height), color=(255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+
+        y = top_pad
+        # 1. Lightning Bolt Symbol (Centered)
+        bolt_x = (width - (bolt_bbox[2] - bolt_bbox[0])) // 2
+        draw.text((bolt_x, y), "⚡", font=font_bold, fill=(0, 0, 0))
+        y += bolt_height + bolt_gap
 
         for line in lines:
             bbox = draw.textbbox((0, 0), line, font=font_bold)
             draw.text(((width - (bbox[2]-bbox[0]))//2, y), line, font=font_bold, fill=(0, 0, 0))
-            y += font_main_size + 10
+            y += main_line_height + line_gap
 
         # 3. Divider line
-        y += 15
+        y += divider_gap
         draw.line([20, y, width-20, y], fill=(0, 0, 0), width=3)
-        y += 25
+        y += date_gap
 
         # 4. Date Sub-header
         date_str = time.strftime("%b %d, %Y")
         bbox = draw.textbbox((0, 0), date_str, font=font_reg)
         draw.text(((width - (bbox[2]-bbox[0]))//2, y), date_str, font=font_reg, fill=(0, 0, 0))
-        y += 60
+        y += sub_line_height + bottom_pad
 
-        return canvas.crop((0, 0, width, y))
+        return canvas
 
     def print_msg(self, message):
         if self.is_paused:
