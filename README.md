@@ -1,42 +1,46 @@
-# Ntfy Receipt Printer 🖨️💬
+# Ntfy Receipt Printer
 
-Turn digital notifications into tangible memories (or useful tickets!) with this simple Python service. It listens to your favorite [ntfy.sh](https://ntfy.sh) topic and instantly prints incoming messages to a connected USB thermal receipt printer.
+This project is a Python service that subscribes to the [ntfy.sh](https://ntfy.sh) *or selfhosted ntfy server* topic and prints received messages to a connected USB thermal receipt printer.
 
-Imagine:
-*   A physical notification system for your home or office.
-*   Sending fun, quirky messages to a loved one's printer.
-*   A basic, low-cost order ticketing system for a small shop.
+## Purpose
 
-Developed with efficiency in mind, this project runs beautifully on lightweight, low-power ARM devices like the **Orange Pi Zero 2W (4GB RAM)** running **DietPi**. Just plug in any standard **USB ESC/POS thermal printer**, and you're ready to go!
+This service was designed for:
+*   Creating a physical notification system.
+*   Printing messages received from an ntfy topic.
+*   Serving as a simple order ticket system.
 
----
+## Development Hardware
 
-## Get Started in Minutes! (Manual Run)
+The service was developed and tested on the following hardware:
 
-Want to see it in action quickly? Follow these steps to get your printer spitting out messages without permanent installation.
+*   **Board:** Orange Pi Zero 2W (4GB RAM)
+*   **OS:** DietPi (minimal image)
+*   **Printer:** A standard USB ESC/POS thermal printer.
 
-### 1. Prepare Your System
+## Prerequisites
 
-First, make sure you have Python 3 and some essential tools installed.
+Ensure the following are installed on your system:
 
 ```bash
-# For Debian/Ubuntu-based systems (like DietPi):
+# For Debian/Ubuntu-based systems (e.g., DietPi):
 sudo apt update
 sudo apt install -y python3 python3-pip python3-venv git
 ```
 
-### 2. Grab the Code
+## Manual Execution (Temporary Run)
 
-Clone this repository to your machine. Remember to replace `your-username/ntfy-receipt-printer.git` with the actual URL from GitHub!
+These steps describe how to run the service directly for testing or temporary use.
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/your-username/ntfy-receipt-printer.git
 cd ntfy-receipt-printer
 ```
 
-### 3. Set Up Your Python Environment
+### 2. Set Up Python Environment
 
-Create a dedicated virtual environment for the project and install the necessary Python libraries.
+Create and activate a Python virtual environment, then install required packages.
 
 ```bash
 python3 -m venv venv
@@ -44,57 +48,102 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure Your Printer & Ntfy Topic
+### 3. Configuration
 
-The service uses a `.env` file for all its settings.
+Configure the service parameters using an `.env` file.
 
-*   **Create the file:**
+*   **Create `.env`:**
     ```bash
     cp .env.template .env
     ```
-*   **Edit `.env`:** Open the newly created `.env` file and fill in your details:
+*   **Edit `.env`:** Open the `.env` file and set the following variables:
     *   `NTFY_HOST`: The URL of your ntfy server (e.g., `https://ntfy.sh`).
-    *   `NTFY_TOPIC`: The ntfy topic you want to subscribe to.
-    *   `PRINTER_VENDOR`: Your USB thermal printer's Vendor ID.
-    *   `PRINTER_PRODUCT`: Your USB thermal printer's Product ID.
+    *   `NTFY_TOPIC`: The ntfy topic to subscribe to.
+    *   `PRINTER_VENDOR`: The USB Vendor ID of your thermal printer.
+    *   `PRINTER_PRODUCT`: The USB Product ID of your thermal printer.
 
-    **Pro Tip:** Don't know your printer's Vendor/Product IDs? Just run `lsusb` in your terminal and look for your printer!
+    To find your printer's Vendor and Product IDs, use the `lsusb` command.
 
-### 5. Run It!
+### 4. Run the Service
 
-With your virtual environment still active (`source venv/bin/activate` if you closed your terminal), start the service:
+Ensure your virtual environment is active.
 
 ```bash
 python app.py
 ```
 
-Now, send a message to your configured ntfy topic (e.g., using the ntfy app, website, or `curl`). If everything's correct, your printer should instantly print the message! Press `Ctrl+C` in your terminal to stop the service.
+Messages sent to the configured ntfy topic will now be printed. Press `Ctrl+C` to stop the service.
 
----
+#### Command-Line Flags
 
-## Install as a Systemd Service (For Autostart & Reliability)
+The `app.py` script supports the following command-line flags:
 
-For a more permanent setup, you can install the service to automatically start when your system boots.
+```
+venv ❯ python3 app.py --help
+usage: app.py [-h] [--host HOST] [--topic TOPIC] [--calibrate] [--test-align] [--preview]
+              [--example {text,kanban}]
 
-**Important:** You need `sudo` privileges to run the installer.
+Receipt printer listening to an ntfy topic
+
+options:
+  -h, --help            show this help message and exit
+  --host HOST           ntfy host (including scheme)
+  --topic TOPIC         ntfy topic name
+  --calibrate           print calibration grid to determine printable area
+  --test-align          print alignment test and exit
+  --preview, -p         preview mode - show images instead of printing
+  --example, -e {text,kanban}
+                        show example message
+```
+### Flag Descriptions
+*   `--host <URL>`: Specify the ntfy host URL (e.g., `https://ntfy.example.com`). Overrides `NTFY_HOST` from `.env`.
+*   `--topic <NAME>`: Specify the ntfy topic name. Overrides `NTFY_TOPIC` from `.env`.
+*   `--calibrate`: Prints a calibration grid to help determine the printable area and adjust printer settings. The script will output instructions for using the grid.
+*   `--test-align`: Prints an alignment test message and exits.
+*   `--preview`, `-p`: Runs in preview mode, displaying images in a window instead of sending them to the printer. Useful for testing without consuming thermal paper.
+*   `--example <TYPE>`, `-e <TYPE>`: Prints an example message of the specified type (`text` or `kanban`) and exits.
+
+### Calibrating the Print Bounding Box
+
+To optimize printing for your specific thermal printer and paper, you can use the built-in calibration feature:
+
+1.  **Run Calibration:** With your printer connected and the virtual environment active, execute the calibration command:
+    ```bash
+    python app.py --calibrate
+    ```
+2.  **Inspect Printout:** The printer will output a calibration grid. Examine it carefully:
+    *   Note the rightmost column letter that is clearly visible.
+    *   Observe if the text is centered or shifted to one side.
+3.  **Adjust `.env` Variables:** Based on your observations, modify the following variables in your `.env` file:
+    *   `X_OFFSET_MM`: Adjusts the horizontal centering. Use negative values to shift left, positive to shift right.
+    *   `SAFE_MARGIN_MM`: Defines the margin from the paper's edge. Increase this if the right edge of your printout is cut off.
+    *   `MAX_HEIGHT_MM`: (Optional) Sets a maximum height for receipts in millimeters.
+
+    *Example .env adjustments:*
+    ```
+    X_OFFSET_MM=2
+    SAFE_MARGIN_MM=5
+    # MAX_HEIGHT_MM=150
+    ```
+    Repeat the calibration process until you are satisfied with the print alignment and bounding box.
+
+## Systemd Service Installation (Permanent Run)
+
+To install the service to run automatically on system boot, use the provided installer script.
+
+**Note:** This script requires `sudo` privileges.
 
 ```bash
 sudo ./scripts/install_service.sh $(pwd) $(whoami)
 ```
 
-This handy script does all the heavy lifting:
-1.  It copies a `systemd` service file to `/etc/systemd/system/`.
-2.  It creates a default environment file for the service at `/etc/default/receipt-printer`, pulling values from your project's `.env` file.
-3.  Finally, it enables and starts the `receipt-printer` service for you.
+This script performs the following actions:
+1.  Copies a systemd service file to `/etc/systemd/system/`.
+2.  Creates a default environment file at `/etc/default/receipt-printer` using values from your project's `.env` file.
+3.  Enables and starts the `receipt-printer` service.
 
-To check if your new service is running correctly:
+Check the service status with:
 
 ```bash
 systemctl status receipt-printer
 ```
-
-Congratulations! Your physical notification system is now fully operational and will automatically start with your machine.
-
----
-
-Enjoy your new printer!
