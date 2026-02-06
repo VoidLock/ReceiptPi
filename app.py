@@ -17,6 +17,7 @@ import sys
 import argparse
 import json
 
+from PIL import ImageOps, ImageEnhance
 from ntfy_printer import config
 from ntfy_printer.printer import WhiteboardPrinter
 from ntfy_printer.listener import listen
@@ -52,6 +53,7 @@ def main():
     
     # Example mode
     if args.example:
+        message = None
         if args.example == "text":
             message = "Lunch Time! 🍕🍔"
             print(f"Example plain text: {message}")
@@ -68,8 +70,9 @@ def main():
             })
             print(f"Example kanban card:\n{message}")
         
-        wp = WhiteboardPrinter(preview_mode=True)
-        wp.print_msg(message)
+        if message:
+            wp = WhiteboardPrinter(preview_mode=True)
+            wp.print_msg(message)
         sys.exit(0)
     
     if args.calibrate:
@@ -95,27 +98,28 @@ def main():
         img = wp.create_calibration_grid()
         
         try:
-            from PIL import ImageOps, ImageEnhance
             img_mono = img.convert("L")
             img_mono = ImageOps.autocontrast(img_mono)
             img_mono = ImageEnhance.Contrast(img_mono).enhance(config.IMAGE_CONTRAST)
             img_mono = img_mono.convert("1")
             
-            if config.IMAGE_IMPLS:
-                impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
-            else:
-                impls = [config.IMAGE_IMPL]
-            
-            for impl in impls:
-                try:
-                    wp.p.image(img_mono, impl=impl)
-                    break
-                except TypeError:
-                    wp.p.image(img_mono)
-                    break
+            if wp.p:
+                if config.IMAGE_IMPLS:
+                    impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
+                else:
+                    impls = [config.IMAGE_IMPL]
+                
+                for impl in impls:
+                    try:
+                        wp.p.image(img_mono, impl=impl)
+                        break
+                    except TypeError:
+                        wp.p.image(img_mono)
+                        break
         finally:
-            wp.p.text("\n\n\n\n")
-            wp.p.cut()
+            if wp.p:
+                wp.p.text("\n\n\n\n")
+                wp.p.cut()
         
         print("\nCalibration grid printed!")
         print("\nBased on what you see:")
@@ -131,24 +135,25 @@ def main():
         wp.print_msg("ALIGNMENT TEST")
         try:
             img_mono = img.convert("L")
-            from PIL import ImageOps, ImageEnhance
             img_mono = ImageOps.autocontrast(img_mono)
             img_mono = ImageEnhance.Contrast(img_mono).enhance(config.IMAGE_CONTRAST)
             img_mono = img_mono.convert("1")
-            if config.IMAGE_IMPLS:
-                impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
-            else:
-                impls = [config.IMAGE_IMPL]
-            for impl in impls:
-                try:
-                    wp.p.image(img_mono, impl=impl)
-                    break
-                except TypeError:
-                    wp.p.image(img_mono)
-                    break
+            if wp.p:
+                if config.IMAGE_IMPLS:
+                    impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
+                else:
+                    impls = [config.IMAGE_IMPL]
+                for impl in impls:
+                    try:
+                        wp.p.image(img_mono, impl=impl)
+                        break
+                    except TypeError:
+                        wp.p.image(img_mono)
+                        break
         finally:
-            wp.p.text("\n\n\n\n")
-            wp.p.cut()
+            if wp.p:
+                wp.p.text("\n\n\n\n")
+                wp.p.cut()
         sys.exit(0)
 
     if not args.host or not args.topic:
