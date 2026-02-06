@@ -13,7 +13,7 @@ if [ ! -f .env ]; then
 fi
 source .env
 
-echo "Running alignment test..."
-python3 app.py --test-align
+echo "Running Application..."
+python3 app.py 
 
 echo "Done!"
