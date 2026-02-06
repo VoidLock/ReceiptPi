@@ -15,7 +15,7 @@ try:
     import psutil
 except Exception:
     psutil = None
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
 from escpos.printer import Usb
 
 # --- CONFIG (env / CLI overridable) ---
@@ -23,10 +23,16 @@ DEFAULT_NTFY_HOST = os.environ.get("NTFY_HOST")
 DEFAULT_NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 VENDOR_ID = int(os.environ.get("PRINTER_VENDOR", "0x0fe6"), 16)
 PRODUCT_ID = int(os.environ.get("PRINTER_PRODUCT", "0x811e"), 16)
+PRINTER_PROFILE = os.environ.get("PRINTER_PROFILE")
 MEM_THRESHOLD_PERCENT = int(os.environ.get("MEM_THRESHOLD_PERCENT", "80"))
 MEM_RESUME_PERCENT = int(os.environ.get("MEM_RESUME_PERCENT", "70"))
 MAX_MESSAGE_LENGTH = int(os.environ.get("MAX_MESSAGE_LENGTH", "300"))
 MAX_LINES = int(os.environ.get("MAX_LINES", "3"))
+# Image processing controls for printer compatibility
+IMAGE_IMPL = os.environ.get("IMAGE_IMPL", "bitImageColumn")
+IMAGE_IMPLS = os.environ.get("IMAGE_IMPLS")
+IMAGE_SCALE = int(os.environ.get("IMAGE_SCALE", "2"))
+IMAGE_CONTRAST = float(os.environ.get("IMAGE_CONTRAST", "2.0"))
 # global stop event used to exit loops cleanly
 STOP_EVENT = threading.Event()
 MONITOR = None
@@ -46,7 +52,10 @@ class WhiteboardPrinter:
 
     def connect(self):
         try:
-            self.p = Usb(VENDOR_ID, PRODUCT_ID, 0)
+            if PRINTER_PROFILE:
+                self.p = Usb(VENDOR_ID, PRODUCT_ID, 0, profile=PRINTER_PROFILE)
+            else:
+                self.p = Usb(VENDOR_ID, PRODUCT_ID, 0)
             # detach kernel driver if active
             try:
                 if self.p.device.is_kernel_driver_active(0):
@@ -123,11 +132,37 @@ class WhiteboardPrinter:
                 logging.warning("No printer connected — skipping print: %s", message)
                 return
             self.p.hw("INIT")
-            # Scale image for larger output (manual 2x upsampling)
-            scaled_width = img.width * 2
-            scaled_height = img.height * 2
+            # Scale and convert to printer-friendly monochrome image
+            scale = max(1, IMAGE_SCALE)
+            scaled_width = img.width * scale
+            scaled_height = img.height * scale
             img_scaled = img.resize((scaled_width, scaled_height), Image.NEAREST)
-            self.p.image(img_scaled, impl="bitImageColumn")
+            img_mono = img_scaled.convert("L")
+            img_mono = ImageOps.autocontrast(img_mono)
+            img_mono = ImageEnhance.Contrast(img_mono).enhance(IMAGE_CONTRAST)
+            img_mono = img_mono.convert("1")
+            # Select implementation list
+            if IMAGE_IMPLS:
+                impls = [i.strip() for i in IMAGE_IMPLS.split(',') if i.strip()]
+            else:
+                impls = [IMAGE_IMPL]
+
+            printed = False
+            for impl in impls:
+                try:
+                    self.p.image(img_mono, impl=impl)
+                    printed = True
+                    break
+                except TypeError:
+                    # Fallback for older escpos versions
+                    self.p.image(img_mono)
+                    printed = True
+                    break
+                except Exception:
+                    logging.exception("Image print failed with impl=%s", impl)
+
+            if not printed:
+                logging.error("All image implementations failed. Try IMAGE_IMPLS=bitImageColumn,bitImageRaster,graphics,raster or set PRINTER_PROFILE.")
             self.p.text("\n\n\n\n")
             self.p.cut()
             print(f"✅ Printed Big: {message}")
@@ -144,6 +179,11 @@ class WhiteboardPrinter:
             if 'img_scaled' in locals():
                 try:
                     del img_scaled
+                except Exception:
+                    pass
+            if 'img_mono' in locals():
+                try:
+                    del img_mono
                 except Exception:
                     pass
             gc.collect()
