@@ -171,11 +171,9 @@ class WhiteboardPrinter:
         if len(message) > config.MAX_MESSAGE_LENGTH:
             message = message[:config.MAX_MESSAGE_LENGTH-3] + "..."
 
-        # Wrap main message
+        # Wrap main message - auto-scale to fit all text (no line limit)
         wrapped = textwrap.wrap(message, width=10)
-        lines = wrapped[:config.MAX_LINES]
-        if len(wrapped) > config.MAX_LINES and lines:
-            lines[-1] = (lines[-1][:max(0, len(lines[-1]) - 3)] + "...")
+        lines = wrapped  # Use all wrapped lines, no truncation
 
         # Measure text sizes
         sample_main_bbox = font_bold.getbbox("Ag")
