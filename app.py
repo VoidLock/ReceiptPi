@@ -380,33 +380,33 @@ class WhiteboardPrinter:
                     return
                 self.p.hw("INIT")
                 # Scale and convert to printer-friendly monochrome image
-            scale = max(1, IMAGE_SCALE)
-            scaled_width = img.width * scale
-            scaled_height = img.height * scale
-            img_scaled = img.resize((scaled_width, scaled_height), Image.NEAREST)
-            img_mono = img_scaled.convert("L")
-            img_mono = ImageOps.autocontrast(img_mono)
-            img_mono = ImageEnhance.Contrast(img_mono).enhance(IMAGE_CONTRAST)
-            img_mono = img_mono.convert("1")
-            # Select implementation list
-            if IMAGE_IMPLS:
-                impls = [i.strip() for i in IMAGE_IMPLS.split(',') if i.strip()]
-            else:
-                impls = [IMAGE_IMPL]
+                scale = max(1, IMAGE_SCALE)
+                scaled_width = img.width * scale
+                scaled_height = img.height * scale
+                img_scaled = img.resize((scaled_width, scaled_height), Image.NEAREST)
+                img_mono = img_scaled.convert("L")
+                img_mono = ImageOps.autocontrast(img_mono)
+                img_mono = ImageEnhance.Contrast(img_mono).enhance(IMAGE_CONTRAST)
+                img_mono = img_mono.convert("1")
+                # Select implementation list
+                if IMAGE_IMPLS:
+                    impls = [i.strip() for i in IMAGE_IMPLS.split(',') if i.strip()]
+                else:
+                    impls = [IMAGE_IMPL]
 
-            printed = False
-            for impl in impls:
-                try:
-                    self.p.image(img_mono, impl=impl)
-                    printed = True
-                    break
-                except TypeError:
-                    # Fallback for older escpos versions
-                    self.p.image(img_mono)
-                    printed = True
-                    break
-                except Exception:
-                    logging.exception("Image print failed with impl=%s", impl)
+                printed = False
+                for impl in impls:
+                    try:
+                        self.p.image(img_mono, impl=impl)
+                        printed = True
+                        break
+                    except TypeError:
+                        # Fallback for older escpos versions
+                        self.p.image(img_mono)
+                        printed = True
+                        break
+                    except Exception:
+                        logging.exception("Image print failed with impl=%s", impl)
 
                 if not printed:
                     logging.error("All image implementations failed. Try IMAGE_IMPLS=bitImageColumn,bitImageRaster,graphics,raster or set PRINTER_PROFILE.")
