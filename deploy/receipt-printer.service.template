@@ -1,0 +1,16 @@
+[Unit]
+Description=Receipt Printer Service
+After=network.target
+
+[Service]
+Type=simple
+User=%USER%
+WorkingDirectory=%WORKDIR%
+EnvironmentFile=/etc/default/receipt-printer
+ExecStart=%PYTHON% %WORKDIR%/app.py --host ${NTFY_HOST} --topic ${NTFY_TOPIC}
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
