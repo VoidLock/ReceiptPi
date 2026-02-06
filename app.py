@@ -170,16 +170,17 @@ def detect_priority(message, payload=None):
 def get_priority_symbol(priority_level):
     """Get the alert symbol(s) and count for priority level.
     
-    Returns: (symbol, count)
+    Returns: (symbol_str) - already formatted
     """
     symbols = {
-        "max": ("⚡", 3),      # ***
-        "high": ("⚡", 2),     # **
-        "default": ("⚡", 1),  # *
-        "low": ("↓", 1),       # Single downward arrow
-        "min": ("•", 1),       # Single bullet point
+        "max": "***",      # 3 asterisks for max
+        "high": "**",      # 2 asterisks for high
+        "default": "*",    # 1 asterisk for default
+        "low": "-",        # Hyphen for low
+        "min": "~",        # Tilde for minimal
     }
-    return symbols.get(priority_level, ("⚡", 1))
+    return symbols.get(priority_level, "*")
+
 
 def draw_priority_banner(draw, x, y, width, height, priority, font, text_color=(0, 0, 0), bg_color=(200, 200, 200)):
     """Draw a priority banner with visual styling based on priority level.
@@ -349,10 +350,8 @@ class WhiteboardPrinter:
         subtext_gap = 10
         bottom_pad = 20
         
-        # Get priority-based alert symbol and count
-        symbol, count = get_priority_symbol(priority)
-        alert_symbol = symbol * count  # Repeat symbol based on priority
-        alert_symbol = strip_emojis(alert_symbol)
+        # Get priority-based alert symbol (already formatted string)
+        alert_symbol = get_priority_symbol(priority)
 
         lines_height = (len(lines) * main_line_height) + (max(0, len(lines) - 1) * line_gap)
         bolt_bbox = font_bold.getbbox(alert_symbol)
