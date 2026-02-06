@@ -121,7 +121,8 @@ class WhiteboardPrinter:
             bolt_height + bolt_gap +
             lines_height +
             divider_gap + 3 + date_gap +
-            sub_line_height +
+            sub_line_height + 5 +  # date
+            sub_line_height +  # time
             bottom_pad
         )
 
