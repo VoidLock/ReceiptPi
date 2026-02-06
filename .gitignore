@@ -22,3 +22,4 @@ dry_run_output.png
 .coverage
 .mypy_cache/
 TESTING.md
+AGENTS.md
