@@ -100,7 +100,7 @@ options:
 *   `--topic <NAME>`: Specify the ntfy topic name. Overrides `NTFY_TOPIC` from `.env`.
 *   `--calibrate`: Prints a calibration grid to help determine the printable area and adjust printer settings. The script will output instructions for using the grid.
 *   `--test-align`: Prints an alignment test message and exits.
-*   `--preview`, `-p`: Runs in preview mode, displaying images in a window instead of sending them to the printer. Useful for testing without consuming thermal paper.
+*   `--preview`, `-p`: Runs in preview mode, displaying images in a window instead of sending them to the printer. Useful for testing without consuming thermal paper. Terminal will open image in any image viewer as a preview.
 *   `--example <TYPE>`, `-e <TYPE>`: Prints an example message of the specified type (`text` or `kanban`) and exits.
 
 ### Calibrating the Print Bounding Box
