@@ -32,6 +32,9 @@ PRINTER_DPI = int(os.environ.get("PRINTER_DPI", "203"))
 X_OFFSET_MM = float(os.environ.get("X_OFFSET_MM", "0"))
 Y_OFFSET_MM = float(os.environ.get("Y_OFFSET_MM", "0"))
 
+# Maximum receipt height (optional - leave empty for unlimited)
+MAX_HEIGHT_MM = float(os.environ.get("MAX_HEIGHT_MM", "0")) if os.environ.get("MAX_HEIGHT_MM") else None
+
 # Safe print margins: 4mm on each side of 80mm paper = 72mm printable
 SAFE_MARGIN_MM = 4.0
 

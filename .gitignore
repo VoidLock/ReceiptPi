@@ -15,11 +15,10 @@ dist/
 *.egg
 .DS_Store
 *.log
+*.bak
 dry_run_output.png
 .vscode/
 .idea/
 .pytest_cache/
 .coverage
 .mypy_cache/
-TESTING.md
-AGENTS.md

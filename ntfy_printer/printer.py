@@ -203,6 +203,12 @@ class WhiteboardPrinter:
             qr_height +
             bottom_pad
         )
+        
+        # Apply max height limit if configured
+        if config.MAX_HEIGHT_MM:
+            max_height_px = int(round(config.MAX_HEIGHT_MM / 25.4 * config.PRINTER_DPI))
+            if total_height > max_height_px:
+                total_height = max_height_px
 
         canvas = Image.new('RGB', (full_width, total_height), color=(255, 255, 255))
         draw = ImageDraw.Draw(canvas)
@@ -417,6 +423,98 @@ class WhiteboardPrinter:
         
         return canvas
 
+    def create_calibration_grid(self):
+        """Create calibration grid with coordinates to determine printable area.
+        
+        Returns PIL.Image with grid showing:
+        - Horizontal lines every 10mm with offset labels
+        - Vertical lines every 5mm with coordinate markers
+        - Center line indicator
+        - Right edge markers to determine max printable width
+        """
+        full_width = int(round(config.PAPER_WIDTH_MM / 25.4 * config.PRINTER_DPI))
+        height = int(round(150 / 25.4 * config.PRINTER_DPI))  # 150mm tall grid
+        mm_to_px = config.PRINTER_DPI / 25.4
+        
+        canvas = Image.new('RGB', (full_width, height), color=(255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+        
+        try:
+            font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+            font_tiny = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+        except Exception:
+            font_large = font_small = font_tiny = ImageFont.load_default()
+        
+        # Draw title
+        title = "CALIBRATION GRID"
+        title_bbox = draw.textbbox((0, 0), title, font=font_large)
+        title_x = (full_width - (title_bbox[2] - title_bbox[0])) // 2
+        draw.text((title_x, 10), title, font=font_large, fill=(0, 0, 0))
+        
+        # Instructions
+        inst1 = "Note the last visible column letter on RIGHT edge"
+        inst2 = "Use coordinates for X_OFFSET_MM and RIGHT_MARGIN_MM"
+        inst1_bbox = draw.textbbox((0, 0), inst1, font=font_tiny)
+        inst2_bbox = draw.textbbox((0, 0), inst2, font=font_tiny)
+        draw.text(((full_width - (inst1_bbox[2] - inst1_bbox[0])) // 2, 45), inst1, font=font_tiny, fill=(0, 0, 0))
+        draw.text(((full_width - (inst2_bbox[2] - inst2_bbox[0])) // 2, 60), inst2, font=font_tiny, fill=(0, 0, 0))
+        
+        grid_start_y = 80
+        
+        # Draw horizontal lines every 10mm with row numbers
+        for row_mm in range(0, 65, 10):
+            y = grid_start_y + int(row_mm * mm_to_px)
+            draw.line([0, y, full_width, y], fill=(150, 150, 150), width=1)
+            # Row label on left
+            row_label = f"{row_mm}mm"
+            draw.text((5, y - 12), row_label, font=font_small, fill=(0, 0, 0))
+        
+        # Draw vertical lines every 5mm with column letters (A-Z)
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        for col_idx, col_mm in enumerate(range(0, int(config.PAPER_WIDTH_MM) + 1, 5)):
+            x = int(col_mm * mm_to_px)
+            if x >= full_width:
+                break
+            
+            # Thicker line every 10mm
+            line_width = 2 if col_mm % 10 == 0 else 1
+            draw.line([x, grid_start_y, x, height], fill=(100, 100, 100), width=line_width)
+            
+            # Column letter at top
+            if col_idx < len(letters):
+                letter = letters[col_idx]
+                draw.text((x - 5, grid_start_y - 18), letter, font=font_small, fill=(0, 0, 0))
+                # mm value below letter
+                draw.text((x - 8, grid_start_y - 35), f"{col_mm}", font=font_tiny, fill=(100, 100, 100))
+        
+        # Draw center line (current paper center)
+        center_x = full_width // 2
+        draw.line([center_x, grid_start_y, center_x, height], fill=(255, 0, 0), width=3)
+        draw.text((center_x - 30, grid_start_y + 10), "CENTER", font=font_small, fill=(255, 0, 0))
+        
+        # Draw current safe margins if configured
+        safe_margin_px = int(round(config.SAFE_MARGIN_MM * mm_to_px))
+        left_margin = safe_margin_px
+        right_margin = full_width - safe_margin_px
+        
+        # Left margin line
+        draw.line([left_margin, grid_start_y, left_margin, height], fill=(0, 150, 0), width=2)
+        draw.text((left_margin + 3, grid_start_y + 30), "LEFT", font=font_tiny, fill=(0, 150, 0))
+        
+        # Right margin line
+        draw.line([right_margin, grid_start_y, right_margin, height], fill=(0, 150, 0), width=2)
+        draw.text((right_margin - 35, grid_start_y + 30), "RIGHT", font=font_tiny, fill=(0, 150, 0))
+        
+        # Config info at bottom
+        info_y = height - 60
+        draw.text((10, info_y), f"Current Config:", font=font_small, fill=(0, 0, 0))
+        draw.text((10, info_y + 18), f"PAPER_WIDTH_MM={config.PAPER_WIDTH_MM}", font=font_tiny, fill=(0, 0, 0))
+        draw.text((10, info_y + 30), f"X_OFFSET_MM={config.X_OFFSET_MM}", font=font_tiny, fill=(0, 0, 0))
+        draw.text((10, info_y + 42), f"SAFE_MARGIN_MM={config.SAFE_MARGIN_MM}", font=font_tiny, fill=(0, 0, 0))
+        
+        return canvas
+    
     def create_alignment_test(self):
         """Create alignment test pattern with center line and tick marks."""
         width = int(round(config.PAPER_WIDTH_MM / 25.4 * config.PRINTER_DPI))

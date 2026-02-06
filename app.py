@@ -34,6 +34,7 @@ def main():
     parser = argparse.ArgumentParser(description="Receipt printer listening to an ntfy topic")
     parser.add_argument("--host", default=config.DEFAULT_NTFY_HOST, help="ntfy host (including scheme)")
     parser.add_argument("--topic", default=config.DEFAULT_NTFY_TOPIC, help="ntfy topic name")
+    parser.add_argument("--calibrate", action="store_true", help="print calibration grid to determine printable area")
     parser.add_argument("--test-align", action="store_true", help="print alignment test and exit")
     parser.add_argument("--preview", "-p", action="store_true", help="preview mode - show images instead of printing")
     parser.add_argument("--example", "-e", choices=["text", "kanban"], help="show example message")
@@ -69,6 +70,59 @@ def main():
         
         wp = WhiteboardPrinter(preview_mode=True)
         wp.print_msg(message)
+        sys.exit(0)
+    
+    if args.calibrate:
+        print("\n" + "="*60)
+        print("CALIBRATION MODE")
+        print("="*60)
+        print("\nThis will print a calibration grid.")
+        print("\nInstructions:")
+        print("1. Note the rightmost column letter you can see clearly")
+        print("2. Check if text is centered or shifted")
+        print("3. Update your .env file with these values:")
+        print("\n   X_OFFSET_MM=<adjust left/right centering>")
+        print("   SAFE_MARGIN_MM=<margin from paper edge>")
+        print("   MAX_HEIGHT_MM=<optional max receipt height>")
+        print("\nCurrent settings:")
+        print(f"   PAPER_WIDTH_MM={config.PAPER_WIDTH_MM}")
+        print(f"   X_OFFSET_MM={config.X_OFFSET_MM}")
+        print(f"   SAFE_MARGIN_MM={config.SAFE_MARGIN_MM}")
+        print(f"   MAX_HEIGHT_MM={config.MAX_HEIGHT_MM or 'unlimited'}")
+        print("="*60 + "\n")
+        
+        wp = WhiteboardPrinter()
+        img = wp.create_calibration_grid()
+        
+        try:
+            from PIL import ImageOps, ImageEnhance
+            img_mono = img.convert("L")
+            img_mono = ImageOps.autocontrast(img_mono)
+            img_mono = ImageEnhance.Contrast(img_mono).enhance(config.IMAGE_CONTRAST)
+            img_mono = img_mono.convert("1")
+            
+            if config.IMAGE_IMPLS:
+                impls = [i.strip() for i in config.IMAGE_IMPLS.split(',') if i.strip()]
+            else:
+                impls = [config.IMAGE_IMPL]
+            
+            for impl in impls:
+                try:
+                    wp.p.image(img_mono, impl=impl)
+                    break
+                except TypeError:
+                    wp.p.image(img_mono)
+                    break
+        finally:
+            wp.p.text("\n\n\n\n")
+            wp.p.cut()
+        
+        print("\nCalibration grid printed!")
+        print("\nBased on what you see:")
+        print("- If center line is off, adjust X_OFFSET_MM (negative=left, positive=right)")
+        print("- If right edge is cut off, increase SAFE_MARGIN_MM")
+        print("- To limit receipt length, set MAX_HEIGHT_MM in .env")
+        print("\n")
         sys.exit(0)
 
     if args.test_align:
