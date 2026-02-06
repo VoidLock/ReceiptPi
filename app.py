@@ -97,6 +97,8 @@ class WhiteboardPrinter:
             except Exception:
                 # device/kernel driver info may not be available on some platforms
                 logging.debug("Could not check/detach kernel driver")
+            # Give USB device time to settle after connection
+            time.sleep(0.5)
             print("🟢 Hardware Linked")
         except Exception:
             logging.exception("Failed to connect to USB printer")
@@ -366,13 +368,18 @@ class WhiteboardPrinter:
             # Plain text message
             img = self.create_layout(message)
         
-        try:
-            if not self.p:
-                # No printer available; log and skip printing instead of crashing
-                logging.warning("No printer connected — skipping print: %s", message)
-                return
-            self.p.hw("INIT")
-            # Scale and convert to printer-friendly monochrome image
+        # Retry logic for USB operations (handles transient device errors)
+        max_retries = 3
+        retry_delay = 1.0
+        
+        for attempt in range(max_retries):
+            try:
+                if not self.p:
+                    # No printer available; log and skip printing instead of crashing
+                    logging.warning("No printer connected — skipping print: %s", message)
+                    return
+                self.p.hw("INIT")
+                # Scale and convert to printer-friendly monochrome image
             scale = max(1, IMAGE_SCALE)
             scaled_width = img.width * scale
             scaled_height = img.height * scale
@@ -401,15 +408,28 @@ class WhiteboardPrinter:
                 except Exception:
                     logging.exception("Image print failed with impl=%s", impl)
 
-            if not printed:
-                logging.error("All image implementations failed. Try IMAGE_IMPLS=bitImageColumn,bitImageRaster,graphics,raster or set PRINTER_PROFILE.")
-            self.p.text("\n\n\n\n")
-            self.p.cut()
-            print(f"✅ Printed: {message[:50]}")
-        except Exception as e:
-            logging.exception("Printing error")
-            # attempt reconnect on any error
-            self.connect()
+                if not printed:
+                    logging.error("All image implementations failed. Try IMAGE_IMPLS=bitImageColumn,bitImageRaster,graphics,raster or set PRINTER_PROFILE.")
+                self.p.text("\n\n\n\n")
+                self.p.cut()
+                print(f"✅ Printed: {message[:50]}")
+                break  # Success - exit retry loop
+            except Exception as e:
+                # Check if it's a USB error that might be transient
+                is_usb_error = "USBError" in str(type(e).__name__) or "Entity not found" in str(e) or "No such device" in str(e)
+                
+                if is_usb_error and attempt < max_retries - 1:
+                    logging.warning("USB error on attempt %d/%d: %s - retrying after %.1fs", attempt + 1, max_retries, e, retry_delay)
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    # Try reconnecting
+                    self.connect()
+                    continue
+                else:
+                    logging.exception("Printing error (attempt %d/%d)", attempt + 1, max_retries)
+                    # Final attempt failed - reconnect for next message
+                    self.connect()
+                    break
         finally:
             if 'img' in locals():
                 try:
