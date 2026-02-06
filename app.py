@@ -11,6 +11,7 @@ import sys
 import logging
 import threading
 import gc
+import re
 try:
     import psutil
 except Exception:
@@ -30,11 +31,18 @@ MEM_RESUME_PERCENT = int(os.environ.get("MEM_RESUME_PERCENT", "70"))
 MAX_MESSAGE_LENGTH = int(os.environ.get("MAX_MESSAGE_LENGTH", "300"))
 MAX_LINES = int(os.environ.get("MAX_LINES", "3"))
 # Paper and printer geometry
-PAPER_WIDTH_MM = float(os.environ.get("PAPER_WIDTH_MM", "79.375"))
+PAPER_WIDTH_MM = float(os.environ.get("PAPER_WIDTH_MM", "80"))  # 80mm paper
 PRINTER_DPI = int(os.environ.get("PRINTER_DPI", "203"))
 X_OFFSET_MM = float(os.environ.get("X_OFFSET_MM", "0"))
 Y_OFFSET_MM = float(os.environ.get("Y_OFFSET_MM", "0"))
-SAFE_MARGIN_MM = 4.0  # Safe margin on left/right to prevent cutoff (mm)
+# Max printable: 72mm on 80mm paper, 48mm on 58mm paper
+SAFE_MARGIN_MM = 4.0  # (80mm - 72mm) / 2 = 4mm margin each side
+
+# Calculate pixel dimensions (203 DPI)
+# 80mm paper = 639px total, 72mm printable = 575px usable width
+PAPER_WIDTH_PX = int(round(PAPER_WIDTH_MM / 25.4 * PRINTER_DPI))  # 639px for 80mm
+SAFE_MARGIN_PX = int(round(SAFE_MARGIN_MM / 25.4 * PRINTER_DPI))  # 32px for 4mm
+MAX_PRINTABLE_WIDTH_PX = PAPER_WIDTH_PX - (2 * SAFE_MARGIN_PX)    # 575px (72mm)
 
 # Icon mappings (ASCII-friendly for thermal printer)
 ICON_PRIORITY = {
@@ -62,6 +70,54 @@ ICON_TYPE = {
     "order": "[#]",
     "monday_task": "[M]",
 }
+
+# Common emoji to text mappings for thermal printer compatibility
+EMOJI_MAP = {
+    "🍕": "[pizza]",
+    "🍔": "[burger]",
+    "☕": "[coffee]",
+    "🎉": "[party]",
+    "✅": "[check]",
+    "❌": "[x]",
+    "⚠️": "[warn]",
+    "🔔": "[bell]",
+    "📅": "[cal]",
+    "⏰": "[clock]",
+    "👍": "[+1]",
+    "👎": "[-1]",
+    "❤️": "[heart]",
+    "🔥": "[fire]",
+    "💡": "[idea]",
+    "📧": "[mail]",
+    "📱": "[phone]",
+    "🚨": "[alert]",
+    "✨": "[*]",
+    "⚡": "[!]",
+}
+
+def strip_emojis(text):
+    """Remove or replace emojis with ASCII alternatives for thermal printer."""
+    # First try specific mappings
+    for emoji, replacement in EMOJI_MAP.items():
+        text = text.replace(emoji, replacement)
+    
+    # Remove any remaining emojis (Unicode ranges for common emoji blocks)
+    # This regex covers most emoji ranges
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"  # dingbats
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA00-\U0001FA6F"  # extended symbols
+        "]+", flags=re.UNICODE
+    )
+    text = emoji_pattern.sub('', text)
+    return text
+
 # Image processing controls for printer compatibility
 IMAGE_IMPL = os.environ.get("IMAGE_IMPL", "bitImageColumn")
 IMAGE_IMPLS = os.environ.get("IMAGE_IMPLS")
@@ -139,7 +195,7 @@ class WhiteboardPrinter:
         main_line_height = sample_main_bbox[3] - sample_main_bbox[1]
         sample_sub_bbox = font_reg.getbbox("Ag")
         sub_line_height = sample_sub_bbox[3] - sample_sub_bbox[1]
-        bolt_bbox = font_bold.getbbox("[*]")
+        bolt_bbox = font_bold.getbbox("⚡")
         bolt_height = bolt_bbox[3] - bolt_bbox[1]
 
         top_pad = 20
@@ -166,7 +222,7 @@ class WhiteboardPrinter:
         y = top_pad + y_offset_px
         # 1. Lightning Bolt Symbol (Centered)
         bolt_x = (width - (bolt_bbox[2] - bolt_bbox[0])) // 2
-        draw.text((bolt_x + left_margin, y), "[*]", font=font_bold, fill=(0, 0, 0))
+        draw.text((bolt_x + left_margin, y), "⚡", font=font_bold, fill=(0, 0, 0))
         y += bolt_height + bolt_gap
 
         for line in lines:
@@ -359,14 +415,16 @@ class WhiteboardPrinter:
         try:
             payload = json.loads(message)
             if isinstance(payload, dict) and "type" in payload:
-                # Structured payload — use template
+                # Structured payload — use template (filter emojis from task names)
+                if "task" in payload:
+                    payload["task"] = strip_emojis(payload["task"])
                 img = self.render_structured(payload)
             else:
                 # Fallback to plain text layout
-                img = self.create_layout(message)
+                img = self.create_layout(strip_emojis(message))
         except (json.JSONDecodeError, ValueError):
-            # Plain text message
-            img = self.create_layout(message)
+            # Plain text message - strip emojis
+            img = self.create_layout(strip_emojis(message))
         
         # Retry logic for USB operations (handles transient device errors)
         max_retries = 3
