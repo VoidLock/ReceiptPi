@@ -123,8 +123,11 @@ class WhiteboardPrinter:
                 logging.warning("No printer connected — skipping print: %s", message)
                 return
             self.p.hw("INIT")
-            # --- THE FIX: Double scaling for visibility ---
-            self.p.image(img, impl="bitImageColumn", double_width=True, double_height=True)
+            # Scale image for larger output (manual 2x upsampling)
+            scaled_width = img.width * 2
+            scaled_height = img.height * 2
+            img_scaled = img.resize((scaled_width, scaled_height), Image.NEAREST)
+            self.p.image(img_scaled, impl="bitImageColumn")
             self.p.text("\n\n\n\n")
             self.p.cut()
             print(f"✅ Printed Big: {message}")
@@ -136,6 +139,11 @@ class WhiteboardPrinter:
             if 'img' in locals():
                 try:
                     del img
+                except Exception:
+                    pass
+            if 'img_scaled' in locals():
+                try:
+                    del img_scaled
                 except Exception:
                     pass
             gc.collect()
