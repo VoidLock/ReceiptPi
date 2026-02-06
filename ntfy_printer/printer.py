@@ -192,7 +192,7 @@ class WhiteboardPrinter:
         divider_gap = 15
         date_gap = 25
         subtext_gap = 10
-        bottom_pad = 20
+        bottom_pad = 40  # 20px additional padding for QR code
 
         # Calculate header height
         header_bbox = font_bold.getbbox(header_text)
