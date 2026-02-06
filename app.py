@@ -146,8 +146,12 @@ class WhiteboardPrinter:
 
         # 4. Date Sub-header
         date_str = time.strftime("%b %d, %Y")
+        time_str = time.strftime("%H:%M:%S")
         bbox = draw.textbbox((0, 0), date_str, font=font_reg)
         draw.text(((width - (bbox[2]-bbox[0]))//2 + x_offset_px, y), date_str, font=font_reg, fill=(0, 0, 0))
+        y += sub_line_height + 5
+        bbox_time = draw.textbbox((0, 0), time_str, font=font_reg)
+        draw.text(((width - (bbox_time[2]-bbox_time[0]))//2 + x_offset_px, y), time_str, font=font_reg, fill=(0, 0, 0))
         y += sub_line_height + bottom_pad
 
         return canvas
