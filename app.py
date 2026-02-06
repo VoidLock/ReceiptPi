@@ -196,8 +196,6 @@ class WhiteboardPrinter:
         main_line_height = sample_main_bbox[3] - sample_main_bbox[1]
         sample_sub_bbox = font_reg.getbbox("Ag")
         sub_line_height = sample_sub_bbox[3] - sample_sub_bbox[1]
-        bolt_bbox = font_bold.getbbox("🍆")
-        bolt_height = bolt_bbox[3] - bolt_bbox[1]
 
         top_pad = 20
         bolt_gap = 15
@@ -205,8 +203,16 @@ class WhiteboardPrinter:
         divider_gap = 15
         date_gap = 25
         bottom_pad = 20
+        
+        # Apply emoji filtering to alert symbol
+        alert_symbol = strip_emojis("🍆")
+
+        # Apply emoji filtering to alert symbol
+        alert_symbol = strip_emojis("🍆")
 
         lines_height = (len(lines) * main_line_height) + (max(0, len(lines) - 1) * line_gap)
+        bolt_bbox = font_bold.getbbox(alert_symbol)
+        bolt_height = bolt_bbox[3] - bolt_bbox[1]
         total_height = (
             top_pad +
             bolt_height + bolt_gap +
@@ -223,7 +229,7 @@ class WhiteboardPrinter:
         y = top_pad + y_offset_px
         # 1. Lightning Bolt Symbol (Centered)
         bolt_x = (width - (bolt_bbox[2] - bolt_bbox[0])) // 2
-        draw.text((bolt_x + left_margin, y), "🍆", font=font_bold, fill=(0, 0, 0))
+        draw.text((bolt_x + left_margin, y), alert_symbol, font=font_bold, fill=(0, 0, 0))
         y += bolt_height + bolt_gap
 
         for line in lines:
