@@ -38,7 +38,10 @@ python preview.py --watch  # Live preview from ntfy stream
 
 ### Installing as Systemd Service
 ```bash
-sudo ./scripts/install_service.sh $(pwd) $(whoami)
+chmod +x ./scripts/install_service
+chmod +x ./scripts/uninstall_service
+
+sudo ./scripts/install_service $(whoami)
 sudo systemctl status receipt-printer
 sudo journalctl -u receipt-printer -f
 ```

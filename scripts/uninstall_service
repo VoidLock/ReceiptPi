@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Uninstalls the receipt-printer systemd service.
+# Usage: sudo ./scripts/uninstall_service
+
+SERVICE_NAME="receipt-printer.service"
+UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
+TARGET_DIR="/opt/receipt-printer"
+
+echo "Stopping and disabling service..."
+sudo systemctl stop "$SERVICE_NAME" || true
+sudo systemctl disable "$SERVICE_NAME" || true
+
+echo "Removing systemd unit..."
+sudo rm -f "$UNIT_PATH"
+sudo systemctl daemon-reload
+
+echo "Removing application directory: $TARGET_DIR"
+sudo rm -rf "$TARGET_DIR"
+
+echo "Uninstall complete."

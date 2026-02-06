@@ -5,10 +5,26 @@ Subscribes to ntfy topics via HTTP SSE and renders messages to an ESC/POS USB pr
 Supports multiple message types: plain text, structured JSON (kanban tasks), priority alerts.
 
 Usage:
+    # Normal interactive mode (press 'Q' to exit)
     python app.py --host https://ntfy.example.com --topic my-topic
-    python app.py --preview  (test without printer)
-    python app.py --example text|kanban
-    python app.py --test-align
+    
+    # Server mode (for systemd service, file logging, auto-updates)
+    python app.py --host https://ntfy.example.com --topic my-topic --server --log-level INFO
+    
+    # Testing modes
+    python app.py --preview                    # test without printer
+    python app.py --example text|kanban        # show example message
+    python app.py --test-align                 # print alignment test
+    python app.py --calibrate                  # print calibration grid
+
+Environment Variables:
+    NTFY_HOST, NTFY_TOPIC          - ntfy connection settings
+    LOG_LEVEL                      - logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    LOG_FILE                       - log file path for server mode
+    ERROR_NTFY_TOPIC               - optional ntfy URL to send error notifications
+    AUTO_UPDATE                    - enable automatic git-based updates (true/false)
+    UPDATE_CHECK_INTERVAL          - update check interval in seconds (default: 3600)
+    GITHUB_REPO                    - GitHub repository (default: VoidLock/RecieptPi)
 """
 
 import logging
@@ -16,11 +32,99 @@ import signal
 import sys
 import argparse
 import json
+import os
+import threading
+import requests
 
 from PIL import ImageOps, ImageEnhance
 from ntfy_printer import config
 from ntfy_printer.printer import WhiteboardPrinter
 from ntfy_printer.listener import listen
+
+
+# Global error handler for sending ntfy notifications
+ERROR_NTFY_TOPIC = None
+
+
+class ErrorNotifier:
+    """Send error messages to an ntfy topic."""
+    
+    def __init__(self, ntfy_url):
+        """Initialize with ntfy URL (e.g., https://ntfy.sh/my-errors)"""
+        self.ntfy_url = ntfy_url
+        self.enabled = ntfy_url is not None
+    
+    def send_error(self, title, message):
+        """Send error notification to ntfy topic."""
+        if not self.enabled:
+            return
+        try:
+            payload = {
+                "title": title,
+                "message": message,
+                "priority": "high",
+                "tags": ["error"]
+            }
+            requests.post(self.ntfy_url, json=payload, timeout=5)
+        except Exception as e:
+            logging.error("Failed to send error notification: %s", e)
+
+
+def setup_logging(log_level, server_mode=False, log_file=None):
+    """Setup logging with configurable level and optional file output.
+    
+    Args:
+        log_level (str): Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        server_mode (bool): If True, log to file for systemd service
+        log_file (str): Path to log file (default: /var/log/receipt-printer.log)
+    """
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    
+    logger = logging.getLogger()
+    logger.setLevel(level)
+    
+    # Console handler (always enabled)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # File handler for server mode
+    if server_mode and log_file:
+        try:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            logging.info(f"Logging to file: {log_file}")
+        except PermissionError:
+            logging.error(f"Cannot write to log file {log_file} (permission denied)")
+        except Exception as e:
+            logging.error(f"Failed to setup file logging: {e}")
+
+
+def input_listener():
+    """Listen for 'Q' key press to gracefully shutdown."""
+    try:
+        while not config.STOP_EVENT.is_set():
+            user_input = input().strip().upper()
+            if user_input == "Q":
+                logging.info("Quit command received (Q pressed)")
+                config.STOP_EVENT.set()
+                break
+    except EOFError:
+        # Input stream closed (normal when running in background)
+        pass
+    except KeyboardInterrupt:
+        # Ctrl+C pressed
+        pass
+    except Exception as e:
+        logging.debug(f"Input listener error: {e}")
 
 
 def shutdown(signum, frame):
@@ -32,6 +136,8 @@ def shutdown(signum, frame):
 
 def main():
     """Main entry point."""
+    global ERROR_NTFY_TOPIC
+    
     parser = argparse.ArgumentParser(description="Receipt printer listening to an ntfy topic")
     parser.add_argument("--host", default=config.DEFAULT_NTFY_HOST, help="ntfy host (including scheme)")
     parser.add_argument("--topic", default=config.DEFAULT_NTFY_TOPIC, help="ntfy topic name")
@@ -39,13 +145,19 @@ def main():
     parser.add_argument("--test-align", action="store_true", help="print alignment test and exit")
     parser.add_argument("--preview", "-p", action="store_true", help="preview mode - show images instead of printing")
     parser.add_argument("--example", "-e", choices=["text", "kanban"], help="show example message")
+    parser.add_argument("--server", action="store_true", help="server mode - run as systemd service with file logging")
     args = parser.parse_args()
     
     # Initialize configuration
     config.setup()
     
     # Setup logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    setup_logging(config.LOG_LEVEL, server_mode=args.server, log_file=config.LOG_FILE)
+    
+    # Setup error ntfy topic if provided
+    if config.ERROR_NTFY_TOPIC:
+        ERROR_NTFY_TOPIC = config.ERROR_NTFY_TOPIC
+        logging.info(f"Error notifications enabled: {ERROR_NTFY_TOPIC}")
     
     # Setup signal handlers
     signal.signal(signal.SIGINT, shutdown)
@@ -162,7 +274,23 @@ def main():
         sys.exit(2)
 
     ntfy_url = f"{args.host.rstrip('/')}/{args.topic}/json"
-    listen(ntfy_url, preview_mode=args.preview)
+    
+    # Start input listener thread if not in server mode (allows 'Q' to quit)
+    if not args.server:
+        print(f"👀 Listening to {ntfy_url}")
+        print(f"   Press 'Q' then Enter to stop, or Ctrl+C\n")
+        input_thread = threading.Thread(target=input_listener, daemon=True)
+        input_thread.start()
+    
+    try:
+        listen(ntfy_url, preview_mode=args.preview, error_notifier=ERROR_NTFY_TOPIC, server_mode=args.server)
+    except Exception as e:
+        error_msg = f"Fatal error in listener: {str(e)}"
+        logging.error(error_msg, exc_info=True)
+        if ERROR_NTFY_TOPIC:
+            notifier = ErrorNotifier(ERROR_NTFY_TOPIC)
+            notifier.send_error("Receipt Printer Error", error_msg)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

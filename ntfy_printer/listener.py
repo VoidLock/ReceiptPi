@@ -13,34 +13,65 @@ except ImportError:
 
 from . import config
 from .printer import WhiteboardPrinter
+from .updater import UpdateChecker
 
 
-# Global monitor instance
+# Global monitor and update checker instances
 MONITOR = None
+UPDATE_CHECKER = None
 
 
-def listen(ntfy_url, preview_mode=False):
+def _send_error_notification(ntfy_url, title, message):
+    """Send error notification to ntfy topic."""
+    if not ntfy_url:
+        return
+    try:
+        payload = {
+            "title": title,
+            "message": message,
+            "priority": "high",
+            "tags": ["error"]
+        }
+        requests.post(ntfy_url, json=payload, timeout=5)
+    except Exception as e:
+        logging.error("Failed to send error notification: %s", e)
+
+
+def listen(ntfy_url, preview_mode=False, error_notifier=None, server_mode=False):
     """Connect to ntfy stream and print incoming messages.
     
     Args:
         ntfy_url (str): Full ntfy SSE URL (e.g., https://ntfy.sh/mytopic/json)
         preview_mode (bool): If True, display images instead of printing
+        error_notifier (str): ntfy URL for error notifications (optional)
+        server_mode (bool): If True, running as systemd service
     """
-    global MONITOR
+    global MONITOR, UPDATE_CHECKER
     wp = WhiteboardPrinter(preview_mode=preview_mode)
     
     mode_str = "preview mode" if preview_mode else "printer mode"
-    print(f"👀 Listening to {ntfy_url} ({mode_str})")
-    if preview_mode:
-        print(f"📸 Previews will open automatically for each message")
-    print(f"   Press Ctrl+C to stop\n")
+    if not server_mode:
+        print(f"👀 Listening to {ntfy_url} ({mode_str})")
+        if preview_mode:
+            print(f"📸 Previews will open automatically for each message")
+        print(f"   Press 'Q' then Enter to stop, or Ctrl+C\n")
     
-    logging.info("Listening to %s", ntfy_url)
+    logging.info("Listening to %s (%s)", ntfy_url, mode_str)
+    if error_notifier:
+        logging.info("Error notifications enabled to: %s", error_notifier)
     
     # Start memory monitor (skip in preview mode)
     if not preview_mode:
         MONITOR = MemoryMonitor(wp)
         MONITOR.start()
+    
+    # Start update checker
+    if config.AUTO_UPDATE:
+        UPDATE_CHECKER = UpdateChecker(
+            server_mode=server_mode,
+            error_notifier=error_notifier
+        )
+        UPDATE_CHECKER.start()
     
     while not config.STOP_EVENT.is_set():
         try:
@@ -59,20 +90,30 @@ def listen(ntfy_url, preview_mode=False):
                         if msg:
                             if len(msg) > config.MAX_MESSAGE_LENGTH:
                                 msg = msg[:config.MAX_MESSAGE_LENGTH-3] + "..."
-                            wp.print_msg(msg, payload=payload)
-        except Exception:
+                            try:
+                                wp.print_msg(msg, payload=payload)
+                            except Exception as e:
+                                logging.error("Error printing message: %s", e, exc_info=True)
+                                if error_notifier:
+                                    _send_error_notification(error_notifier, "Printer Error", f"Failed to print message: {str(e)}")
+        except Exception as e:
             if config.STOP_EVENT.is_set():
                 break
             logging.exception("Connection to ntfy failed — retrying in 5s")
+            if error_notifier:
+                _send_error_notification(error_notifier, "Connection Error", f"Failed to connect to ntfy: {str(e)}")
             time.sleep(5)
     
-    # Stop monitor on exit
+    # Stop monitor and update checker on exit
     try:
         if MONITOR:
             MONITOR.stop()
             MONITOR.join(timeout=2.0)
+        if UPDATE_CHECKER:
+            UPDATE_CHECKER.stop()
+            UPDATE_CHECKER.join(timeout=2.0)
     except Exception:
-        logging.debug("Error stopping monitor")
+        logging.debug("Error stopping background threads")
 
 
 class MemoryMonitor(threading.Thread):

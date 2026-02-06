@@ -12,6 +12,16 @@ load_dotenv()
 # --- NTFY Configuration ---
 DEFAULT_NTFY_HOST = os.environ.get("NTFY_HOST")
 DEFAULT_NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
+ERROR_NTFY_TOPIC = os.environ.get("ERROR_NTFY_TOPIC")
+
+# --- Logging Configuration ---
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_FILE = os.environ.get("LOG_FILE", "/var/log/receipt-printer.log")
+
+# --- Auto-Update Configuration ---
+AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "false").lower() == "true"
+UPDATE_CHECK_INTERVAL = int(os.environ.get("UPDATE_CHECK_INTERVAL", "3600"))  # seconds
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "VoidLock/RecieptPi")
 
 # --- USB Printer Configuration ---
 VENDOR_ID = int(os.environ.get("PRINTER_VENDOR", "0x0fe6"), 16)

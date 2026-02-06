@@ -9,6 +9,26 @@ This service was designed for:
 *   Printing messages received from an ntfy topic.
 *   Serving as a simple order ticket system.
 
+## Features
+
+* **Prints ntfy messages** to ESC/POS USB thermal printers
+* **Preview mode** (no printer required) with image output
+* **Structured message support** (plain text, kanban cards, priority alerts)
+* **Calibration & alignment tools** for precise print placement
+* **Memory protection** with automatic pause/resume under high usage
+* **Error notifications** to a separate ntfy topic
+* **Auto-updates** via git with configurable polling interval
+* **Configurable logging** with file output for server mode
+* **Graceful shutdown** via `Q` (interactive) or system signals
+
+### Resource Usage
+
+*Note: The auto-update checker runs as a daemon thread and is idle most of the time.*
+
+* **Memory:** <0.5 MB
+* **CPU:** ~0.1% (1s active per hour)
+* **Network:** <0.1 MB/day
+
 ## Development Hardware
 
 The service was developed and tested on the following hardware:
@@ -34,8 +54,8 @@ These steps describe how to run the service directly for testing or temporary us
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/ntfy-receipt-printer.git
-cd ntfy-receipt-printer
+git clone https://github.com/VoidLock/RecieptPi.git
+cd RecieptPi
 ```
 
 ### 2. Set Up Python Environment
@@ -57,31 +77,69 @@ Configure the service parameters using an `.env` file.
     cp .env.template .env
     ```
 *   **Edit `.env`:** Open the `.env` file and set the following variables:
-    *   `NTFY_HOST`: The URL of your ntfy server (e.g., `https://ntfy.sh`).
-    *   `NTFY_TOPIC`: The ntfy topic to subscribe to.
-    *   `PRINTER_VENDOR`: The USB Vendor ID of your thermal printer.
-    *   `PRINTER_PRODUCT`: The USB Product ID of your thermal printer.
+
+**Required Settings:**
+*   `NTFY_HOST`: The URL of your ntfy server (e.g., `https://ntfy.sh`).
+*   `NTFY_TOPIC`: The ntfy topic to subscribe to **for messages to print**.
+*   `PRINTER_VENDOR`: The USB Vendor ID of your thermal printer (hex format, e.g., `0x0fe6`).
+*   `PRINTER_PRODUCT`: The USB Product ID of your thermal printer (hex format, e.g., `0x811e`).
 
     To find your printer's Vendor and Product IDs, use the `lsusb` command.
+
+**Optional Settings:**
+*   `LOG_LEVEL`: Logging verbosity - `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` (default: `INFO`)
+*   `LOG_FILE`: Log file path for server mode (default: `/var/log/receipt-printer.log`)
+*   `ERROR_NTFY_TOPIC`: **Separate** ntfy topic URL to send error notifications to (e.g., `https://ntfy.sh/my-printer-errors`). This should be different from your main `NTFY_TOPIC`.
+*   `AUTO_UPDATE`: Enable automatic git-based updates - `true` or `false` (default: `false`)
+*   `UPDATE_CHECK_INTERVAL`: Seconds between update checks (default: `3600` = 1 hour)
+*   `GITHUB_REPO`: GitHub repository for updates (default: `VoidLock/RecieptPi`)
+
+**Example `.env` file:**
+```bash
+# Required - Messages TO print
+NTFY_HOST=https://ntfy.sh
+NTFY_TOPIC=my-receipt-printer
+
+# Logging & Errors - Errors FROM the printer (separate topic!)
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/receipt-printer.log
+ERROR_NTFY_TOPIC=https://ntfy.sh/my-printer-errors
+
+# Auto-Updates
+AUTO_UPDATE=true
+UPDATE_CHECK_INTERVAL=3600
+GITHUB_REPO=VoidLock/RecieptPi
+
+# Printer
+PRINTER_VENDOR=0x0fe6
+PRINTER_PRODUCT=0x811e
+```
 
 ### 4. Run the Service
 
 Ensure your virtual environment is active.
 
 ```bash
+# Interactive mode (press 'Q' then Enter to quit, or Ctrl+C)
 python app.py
+
+# Server mode (uses LOG_LEVEL and LOG_FILE from .env)
+python app.py --server
 ```
 
-Messages sent to the configured ntfy topic will now be printed. Press `Ctrl+C` to stop the service.
+Messages sent to the configured ntfy topic will now be printed. 
+
+**Stopping the service:**
+- **Interactive mode:** Press `Q` then `Enter`, or use `Ctrl+C`
+- **Server mode:** Use `systemctl stop receipt-printer`
 
 #### Command-Line Flags
 
 The `app.py` script supports the following command-line flags:
 
-```
-venv ❯ python3 app.py --help
-usage: app.py [-h] [--host HOST] [--topic TOPIC] [--calibrate] [--test-align] [--preview]
-              [--example {text,kanban}]
+```bash
+usage: app.py [-h] [--host HOST] [--topic TOPIC] [--calibrate] [--test-align]
+              [--preview] [--example {text,kanban}] [--server]
 
 Receipt printer listening to an ntfy topic
 
@@ -94,10 +152,16 @@ options:
   --preview, -p         preview mode - show images instead of printing
   --example, -e {text,kanban}
                         show example message
+  --server              server mode - run as systemd service with file logging
 ```
+
 ### Flag Descriptions
+
+**Connection Flags:**
 *   `--host <URL>`: Specify the ntfy host URL (e.g., `https://ntfy.example.com`). Overrides `NTFY_HOST` from `.env`.
 *   `--topic <NAME>`: Specify the ntfy topic name. Overrides `NTFY_TOPIC` from `.env`.
+
+**Testing & Calibration Flags:**
 *   `--calibrate`: Prints a calibration grid to help determine the printable area and adjust printer settings. The script will output instructions for using the grid.
 *   `--test-align`: Prints an alignment test message and exits.
 *   `--preview`, `-p`: Runs in preview mode, displaying images in a window instead of sending them to the printer. Useful for testing without consuming thermal paper. Terminal will open image in any image viewer as a preview.
@@ -134,16 +198,94 @@ To install the service to run automatically on system boot, use the provided ins
 **Note:** This script requires `sudo` privileges.
 
 ```bash
-sudo ./scripts/install_service.sh $(pwd) $(whoami)
+chmod +x ./scripts/install_service
+chmod +x ./scripts/uninstall_service
+
+sudo ./scripts/install_service $(whoami)
 ```
 
 This script performs the following actions:
-1.  Copies a systemd service file to `/etc/systemd/system/`.
-2.  Creates a default environment file at `/etc/default/receipt-printer` using values from your project's `.env` file.
-3.  Enables and starts the `receipt-printer` service.
+1.  Copies the application to `/opt/receipt-printer`.
+2.  Moves or creates the `.env` file in `/opt/receipt-printer/.env`.
+3.  Creates a virtual environment in `/opt/receipt-printer/venv` and installs dependencies.
+4.  Copies a systemd service file to `/etc/systemd/system/`.
+5.  Enables and starts the `receipt-printer` service.
 
 Check the service status with:
 
 ```bash
 systemctl status receipt-printer
 ```
+
+View service logs:
+
+```bash
+# Real-time logs
+journalctl -u receipt-printer -f
+
+# Last 100 lines
+journalctl -u receipt-printer -n 100
+```
+
+### Uninstall
+
+To remove the service and application:
+
+```bash
+chmod +x ./scripts/uninstall_service
+sudo ./scripts/uninstall_service
+```
+
+## Advanced Features
+
+### Auto-Updates
+
+The service can automatically check for and install updates from the GitHub repository.
+
+**Enable auto-updates:**
+1. Set `AUTO_UPDATE=true` in your `.env` file
+2. Restart the service: `sudo systemctl restart receipt-printer`
+
+The service will:
+- Check GitHub every hour (configurable via `UPDATE_CHECK_INTERVAL`)
+- Automatically pull latest changes via git
+- Restart the service to apply updates
+- Send error notifications if updates fail (requires `ERROR_NTFY_TOPIC`)
+
+**Manual update:**
+```bash
+cd /path/to/ntfy-receipt-printer
+git pull origin main
+sudo systemctl restart receipt-printer
+```
+
+### Error Notifications
+
+Set `ERROR_NTFY_TOPIC` in `.env` to receive error notifications sent **to a separate topic** from your main print topic.
+
+**Important:** Use a different topic than `NTFY_TOPIC`:
+- `NTFY_TOPIC` = Messages you send TO the printer (to print)
+- `ERROR_NTFY_TOPIC` = Error messages FROM the printer (for monitoring)
+
+You'll receive notifications when:
+- Printer connection fails
+- Print jobs fail
+- ntfy connection errors occur
+- Auto-updates fail
+
+Example:
+```bash
+ERROR_NTFY_TOPIC=https://ntfy.sh/my-printer-errors
+```
+
+### Logging Levels
+
+Control log verbosity with `LOG_LEVEL` in `.env`:
+- `DEBUG`: Detailed diagnostic information
+- `INFO`: General informational messages (default)
+- `WARNING`: Warning messages for potential issues
+- `ERROR`: Error messages for serious problems
+
+Set log file location with `LOG_FILE` in `.env` (default: `/var/log/receipt-printer.log`).
+
+In server mode (`--server` flag), logs are written to the configured log file.

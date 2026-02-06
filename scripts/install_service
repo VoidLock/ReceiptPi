@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Installs the receipt-printer systemd service.
+# Usage: sudo ./scripts/install_service [user]
+# - user: system user to run the service as (default: SUDO_USER or current user)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+USER_TO_RUN="${1:-${SUDO_USER:-$(whoami)}}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python)}"
+
+SERVICE_NAME="receipt-printer.service"
+UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
+TEMPLATE_PATH="${REPO_DIR}/deploy/receipt-printer.service.template"
+TARGET_DIR="/opt/receipt-printer"
+
+if [ ! -f "$TEMPLATE_PATH" ]; then
+  echo "Template not found: $TEMPLATE_PATH" >&2
+  exit 1
+fi
+
+echo "Installing to $TARGET_DIR"
+sudo mkdir -p "$TARGET_DIR"
+sudo rsync -a --delete --exclude ".git" --exclude "venv" "$REPO_DIR/" "$TARGET_DIR/"
+sudo chown -R "$USER_TO_RUN":"$USER_TO_RUN" "$TARGET_DIR"
+
+# Ensure .env exists in target directory
+if [ -f "$REPO_DIR/.env" ]; then
+  sudo cp "$REPO_DIR/.env" "$TARGET_DIR/.env"
+elif [ -f "$TARGET_DIR/.env" ]; then
+  echo "Using existing $TARGET_DIR/.env"
+elif [ -f "$REPO_DIR/.env.template" ]; then
+  sudo cp "$REPO_DIR/.env.template" "$TARGET_DIR/.env"
+  echo "Created $TARGET_DIR/.env from template. Please edit it."
+else
+  echo "Error: .env or .env.template not found." >&2
+  exit 1
+fi
+
+# Create virtual environment and install dependencies
+echo "Setting up virtual environment..."
+sudo -u "$USER_TO_RUN" "$PYTHON_BIN" -m venv "$TARGET_DIR/venv"
+sudo -u "$USER_TO_RUN" "$TARGET_DIR/venv/bin/pip" install -r "$TARGET_DIR/requirements.txt"
+
+# Render unit file from template
+UNIT_CONTENT=$(sed \
+  -e "s|%USER%|${USER_TO_RUN}|g" \
+  -e "s|%WORKDIR%|${TARGET_DIR}|g" \
+  -e "s|%PYTHON%|${TARGET_DIR}/venv/bin/python|g" \
+  "$TEMPLATE_PATH")
+
+echo "Installing systemd unit to $UNIT_PATH"
+echo "$UNIT_CONTENT" | sudo tee "$UNIT_PATH" > /dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable --now "$SERVICE_NAME"
+
+echo "Service installed and started. Check status with:"
+echo "  sudo systemctl status $SERVICE_NAME"
