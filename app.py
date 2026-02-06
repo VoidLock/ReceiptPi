@@ -17,6 +17,7 @@ except Exception:
     psutil = None
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
 from escpos.printer import Usb
+import qrcode
 
 # --- CONFIG (env / CLI overridable) ---
 DEFAULT_NTFY_HOST = os.environ.get("NTFY_HOST")
@@ -33,6 +34,33 @@ PAPER_WIDTH_MM = float(os.environ.get("PAPER_WIDTH_MM", "79.375"))
 PRINTER_DPI = int(os.environ.get("PRINTER_DPI", "203"))
 X_OFFSET_MM = float(os.environ.get("X_OFFSET_MM", "0"))
 Y_OFFSET_MM = float(os.environ.get("Y_OFFSET_MM", "0"))
+
+# Icon mappings (ASCII-friendly for thermal printer)
+ICON_PRIORITY = {
+    "critical": "[!!!]",
+    "high": "[!!]",
+    "medium": "[!]",
+    "low": "[-]",
+}
+
+ICON_STATUS = {
+    "done": "[OK]",
+    "completed": "[OK]",
+    "in_progress": "[WIP]",
+    "wip": "[WIP]",
+    "todo": "[TODO]",
+    "blocked": "[BLOCKED]",
+    "on_hold": "[HOLD]",
+}
+
+ICON_TYPE = {
+    "task": "[T]",
+    "bug": "[B]",
+    "feature": "[F]",
+    "alert": "[A]",
+    "order": "[#]",
+    "monday_task": "[M]",
+}
 # Image processing controls for printer compatibility
 IMAGE_IMPL = os.environ.get("IMAGE_IMPL", "bitImageColumn")
 IMAGE_IMPLS = os.environ.get("IMAGE_IMPLS")
@@ -157,6 +185,88 @@ class WhiteboardPrinter:
 
         return canvas
 
+    def render_structured(self, payload):
+        """Render structured JSON payloads (e.g., monday.com tasks)."""
+        msg_type = payload.get("type", "generic")
+        
+        if msg_type == "monday_task":
+            return self._render_monday_task(payload)
+        else:
+            # Generic fallback
+            return self.create_layout(json.dumps(payload))
+    
+    def _render_monday_task(self, payload):
+        """Compact monday.com task card layout."""
+        width = int(round(PAPER_WIDTH_MM / 25.4 * PRINTER_DPI))
+        x_offset_px = int(round(X_OFFSET_MM / 25.4 * PRINTER_DPI))
+        y_offset_px = int(round(Y_OFFSET_MM / 25.4 * PRINTER_DPI))
+        
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
+            font_meta = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+        except Exception:
+            font_title = font_meta = ImageFont.load_default()
+        
+        # Extract fields (with safe defaults)
+        task_name = payload.get("task", "Task").strip()[:50]
+        priority = payload.get("priority", "medium").lower()
+        status = payload.get("status", "todo").lower()
+        assignee = payload.get("assignee", "").upper()[:3]
+        due_date = payload.get("due_date", "")[:10]
+        ref_id = payload.get("id", payload.get("ref_id", ""))
+        qr_data = payload.get("qr_url") or payload.get("url")
+        
+        # Build compact layout
+        height = 350
+        canvas = Image.new('RGB', (width, height), color=(255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+        
+        y = 15 + y_offset_px
+        
+        # Task title (wrapped)
+        lines = textwrap.wrap(task_name, width=15)
+        for line in lines[:2]:
+            bbox = draw.textbbox((0, 0), line, font=font_title)
+            draw.text(((width - (bbox[2]-bbox[0]))//2 + x_offset_px, y), line, font=font_title, fill=(0, 0, 0))
+            y += 45
+        
+        # Meta line: [PRIORITY] | STATUS | ASSIGN
+        priority_icon = ICON_PRIORITY.get(priority, "[!]")
+        status_icon = ICON_STATUS.get(status, "[?]")
+        meta_str = f"{priority_icon} {status_icon}"
+        if assignee:
+            meta_str += f" | {assignee}"
+        if due_date:
+            meta_str += f" | {due_date}"
+        
+        bbox = draw.textbbox((0, 0), meta_str, font=font_meta)
+        draw.text(((width - (bbox[2]-bbox[0]))//2 + x_offset_px, y), meta_str, font=font_meta, fill=(0, 0, 0))
+        y += 35
+        
+        # Divider
+        draw.line([20 + x_offset_px, y, width-20 + x_offset_px, y], fill=(0, 0, 0), width=2)
+        y += 15
+        
+        # QR code (small, bottom right) or ref ID
+        if qr_data:
+            try:
+                qr = qrcode.QRCode(version=1, box_size=2, border=1)
+                qr.add_data(qr_data)
+                qr.make()
+                qr_img = qr.make_image(fill_color="black", back_color="white")
+                qr_resized = qr_img.resize((60, 60), Image.NEAREST)
+                qr_x = width - 70
+                canvas.paste(qr_resized, (qr_x + x_offset_px, y))
+            except Exception as e:
+                logging.warning("QR generation failed: %s", e)
+        
+        # Ref ID (left side)
+        if ref_id:
+            bbox = draw.textbbox((0, 0), str(ref_id), font=font_meta)
+            draw.text((20 + x_offset_px, y + 15), str(ref_id), font=font_meta, fill=(0, 0, 0))
+        
+        return canvas
+
     def create_alignment_test(self):
         # Build a simple alignment test using the same layout as regular messages
         width = int(round(PAPER_WIDTH_MM / 25.4 * PRINTER_DPI))
@@ -201,8 +311,21 @@ class WhiteboardPrinter:
             return
         if not self.p:
             self.connect()
+        
+        # Detect if message is JSON (structured payload)
         try:
+            payload = json.loads(message)
+            if isinstance(payload, dict) and "type" in payload:
+                # Structured payload — use template
+                img = self.render_structured(payload)
+            else:
+                # Fallback to plain text layout
+                img = self.create_layout(message)
+        except (json.JSONDecodeError, ValueError):
+            # Plain text message
             img = self.create_layout(message)
+        
+        try:
             if not self.p:
                 # No printer available; log and skip printing instead of crashing
                 logging.warning("No printer connected — skipping print: %s", message)
@@ -241,7 +364,7 @@ class WhiteboardPrinter:
                 logging.error("All image implementations failed. Try IMAGE_IMPLS=bitImageColumn,bitImageRaster,graphics,raster or set PRINTER_PROFILE.")
             self.p.text("\n\n\n\n")
             self.p.cut()
-            print(f"✅ Printed Big: {message}")
+            print(f"✅ Printed: {message[:50]}")
         except Exception as e:
             logging.exception("Printing error")
             # attempt reconnect on any error

@@ -3,3 +3,4 @@ Pillow
 python-escpos
 pyusb
 psutil
+qrcode[pil]
