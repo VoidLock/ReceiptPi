@@ -24,7 +24,7 @@ Environment Variables:
     ERROR_NTFY_TOPIC               - optional ntfy URL to send error notifications
     AUTO_UPDATE                    - enable automatic git-based updates (true/false)
     UPDATE_CHECK_INTERVAL          - update check interval in seconds (default: 3600)
-    GITHUB_REPO                    - GitHub repository (default: VoidLock/RecieptPi)
+    GITHUB_REPO                    - GitHub repository (default: VoidLock/ReceiptPi)
 """
 
 import logging

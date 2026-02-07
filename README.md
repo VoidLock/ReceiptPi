@@ -1,4 +1,4 @@
-# RecieptPi
+# ReceiptPi
 
 This project is a Python service that subscribes to the [ntfy.sh](https://ntfy.sh) *or selfhosted ntfy server* topic and prints received messages to a connected USB thermal receipt printer.
 
@@ -57,8 +57,8 @@ These steps describe how to run the service directly for testing or temporary us
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/VoidLock/RecieptPi.git
-cd RecieptPi
+git clone https://github.com/VoidLock/ReceiptPi.git
+cd ReceiptPi
 ```
 
 ### 2. Set Up Python Environment
@@ -104,7 +104,7 @@ Configure the service parameters using an `.env` file.
 *   `ERROR_NTFY_TOPIC`: Separate ntfy topic for error notifications (e.g., `https://ntfy.sh/my-printer-errors`)
 *   `AUTO_UPDATE`: Enable automatic git-based updates - `true` or `false` (default: `false`)
 *   `UPDATE_CHECK_INTERVAL`: Seconds between update checks (default: `3600` = 1 hour)
-*   `GITHUB_REPO`: GitHub repository for updates (default: `VoidLock/RecieptPi`)
+*   `GITHUB_REPO`: GitHub repository for updates (default: `VoidLock/ReceiptPi`)
 *   `PRINTER_PROFILE`: Optional printer profile for python-escpos (e.g., `TM-T20`, `RP80`). Leave empty for generic ESC/POS.
 *   `MEM_THRESHOLD_PERCENT`: Memory usage threshold % to pause printing (default: `80`)
 *   `MEM_RESUME_PERCENT`: Memory usage % to resume printing (default: `70`)
@@ -134,7 +134,7 @@ ERROR_NTFY_TOPIC=https://ntfy.sh/my-printer-errors
 # Auto-Updates
 AUTO_UPDATE=true
 UPDATE_CHECK_INTERVAL=3600
-GITHUB_REPO=VoidLock/RecieptPi
+GITHUB_REPO=VoidLock/ReceiptPi
 
 # Printer
 PRINTER_VENDOR=0x0fe6
@@ -236,9 +236,9 @@ sudo ./scripts/install_service $(whoami)
 ```
 
 This script performs the following actions:
-1.  Copies the application to `/opt/RecieptPi`.
-2.  Moves or creates the `.env` file in `/opt/RecieptPi/.env`.
-3.  Creates a virtual environment in `/opt/RecieptPi/venv` and installs dependencies.
+1.  Copies the application to `/opt/ReceiptPi`.
+2.  Moves or creates the `.env` file in `/opt/ReceiptPi/.env`.
+3.  Creates a virtual environment in `/opt/ReceiptPi/venv` and installs dependencies.
 4.  Copies a systemd service file to `/etc/systemd/system/`.
 5.  Enables and starts the `receipt-printer` service.
 
@@ -363,7 +363,7 @@ sudo ./scripts/install_service $(whoami)
 
 **Manual update:**
 ```bash
-cd /opt/RecieptPi
+cd /opt/ReceiptPi
 git pull origin main
 sudo systemctl restart receipt-printer
 ```
@@ -460,6 +460,76 @@ IMAGE_CONTRAST=1.5
 
 **Solution:**
 1. Check logs: `journalctl -u receipt-printer -n 50`
-2. Verify .env exists: `cat /opt/RecieptPi/.env`
-3. Check permissions: `sudo chown -R $USER:$USER /opt/RecieptPi`
+2. Verify .env exists: `cat /opt/ReceiptPi/.env`
+3. Check permissions: `sudo chown -R $USER:$USER /opt/ReceiptPi`
 4. Restart: `sudo systemctl restart receipt-printer`
+
+## License
+
+**ReceiptPi** is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+This means:
+- ✅ **Free to use** - No cost, forever
+- ✅ **Free to modify** - Source code is yours to customize
+- ✅ **Free to distribute** - Share with others freely
+- ✅ **Community benefits** - If you modify and use it, improvements must be shared back
+- ❌ **Not for profit** - Cannot be sold or used commercially without sharing modifications
+
+### Why AGPL-3.0?
+
+We chose AGPL-3.0 to ensure:
+1. ReceiptPi remains free and open forever
+2. No one can lock improvements behind commercial walls
+3. Community contributions benefit everyone
+4. Network use (future service versions) requires source sharing
+
+For the full legal text, see [LICENSE](LICENSE).
+
+## Credits
+
+ReceiptPi is built on excellent open-source projects. Special thanks to:
+
+- **[python-escpos](https://github.com/python-escpos/python-escpos)** - ESC/POS thermal printer driver
+- **[Pillow](https://github.com/python-pillow/Pillow)** - Image processing
+- **[ntfy.sh](https://ntfy.sh)** - Notification infrastructure
+- **[requests](https://github.com/psf/requests)** - HTTP library
+- **[qrcode](https://github.com/lincolnloop/python-qrcode)** - QR code generation
+- **[pilmoji](https://github.com/jay3332/pilmoji)** - Emoji rendering
+- **[psutil](https://github.com/giampaolo/psutil)** - System monitoring
+- **[pyusb](https://github.com/pyusb/pyusb)** - USB communication
+
+See [CREDITS.md](CREDITS.md) for detailed dependency information.
+
+## Contributing
+
+We welcome contributions from the community! When you contribute:
+
+1. **Your code stays free** - All contributions are AGPL-3.0 licensed
+2. **Help everyone** - Your improvements benefit the entire community
+3. **Get credit** - Contributors may be listed in [CREDITS.md](CREDITS.md)
+
+To contribute:
+```bash
+# Fork the repository on GitHub
+# Create a feature branch
+git checkout -b feature/your-feature-name
+
+# Make your changes and commit
+git add .
+git commit -m "Add your feature description"
+
+# Push and create a Pull Request
+git push origin feature/your-feature-name
+```
+
+**Code guidelines:**
+- Follow PEP 8 Python style guide
+- Add docstrings to functions
+- Include error handling
+- Test your changes before submitting
+
+## Support
+
+- **Issues:** [GitHub Issues](https://github.com/VoidLock/ReceiptPi/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/VoidLock/ReceiptPi/discussions)
+- **Documentation:** [README.md](README.md) and [CREDITS.md](CREDITS.md)

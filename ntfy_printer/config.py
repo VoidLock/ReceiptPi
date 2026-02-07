@@ -27,7 +27,7 @@ LOG_FILE = os.environ.get("LOG_FILE", "/var/log/receipt-printer.log")
 # --- Auto-Update Configuration ---
 AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "false").lower() == "true"
 UPDATE_CHECK_INTERVAL = int(os.environ.get("UPDATE_CHECK_INTERVAL", "3600"))  # seconds
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "VoidLock/RecieptPi")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "VoidLock/ReceiptPi")
 
 # --- USB Printer Configuration ---
 VENDOR_ID = int(os.environ.get("PRINTER_VENDOR", "0x0fe6"), 16)

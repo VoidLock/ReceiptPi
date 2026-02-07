@@ -13,7 +13,7 @@ PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python)}"
 SERVICE_NAME="receipt-printer.service"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
 TEMPLATE_PATH="${REPO_DIR}/deploy/receipt-printer.service.template"
-TARGET_DIR="/opt/RecieptPi"
+TARGET_DIR="/opt/ReceiptPi"
 
 if [ ! -f "$TEMPLATE_PATH" ]; then
   echo "Template not found: $TEMPLATE_PATH" >&2
