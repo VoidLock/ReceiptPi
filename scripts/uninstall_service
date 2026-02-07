@@ -6,7 +6,7 @@ set -euo pipefail
 
 SERVICE_NAME="receipt-printer.service"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
-TARGET_DIR="/opt/receipt-printer"
+TARGET_DIR="/opt/RecieptPi"
 
 echo "Stopping and disabling service..."
 sudo systemctl stop "$SERVICE_NAME" || true

@@ -211,9 +211,9 @@ sudo ./scripts/install_service $(whoami)
 ```
 
 This script performs the following actions:
-1.  Copies the application to `/opt/receipt-printer`.
-2.  Moves or creates the `.env` file in `/opt/receipt-printer/.env`.
-3.  Creates a virtual environment in `/opt/receipt-printer/venv` and installs dependencies.
+1.  Copies the application to `/opt/RecieptPi`.
+2.  Moves or creates the `.env` file in `/opt/RecieptPi/.env`.
+3.  Creates a virtual environment in `/opt/RecieptPi/venv` and installs dependencies.
 4.  Copies a systemd service file to `/etc/systemd/system/`.
 5.  Enables and starts the `receipt-printer` service.
 
@@ -311,7 +311,14 @@ Result:
 - QR code encodes: `sms://5554567`
 - Scanning opens SMS compose with pre-filled number
 
+### Auto-Updates
+
 The service can automatically check for and install updates from the GitHub repository.
+
+**Requirements:**
+- The application must be installed from a git clone (the install script preserves `.git` directory)
+- `AUTO_UPDATE=true` in `.env`
+- Running in server mode (systemd service)
 
 **Enable auto-updates:**
 1. Set `AUTO_UPDATE=true` in your `.env` file
@@ -323,9 +330,15 @@ The service will:
 - Restart the service to apply updates
 - Send error notifications if updates fail (requires `ERROR_NTFY_TOPIC`)
 
+**Important:** If you see "not a git repository" errors, reinstall using the install script:
+```bash
+sudo ./scripts/uninstall_service
+sudo ./scripts/install_service $(whoami)
+```
+
 **Manual update:**
 ```bash
-cd /path/to/ntfy-receipt-printer
+cd /opt/RecieptPi
 git pull origin main
 sudo systemctl restart receipt-printer
 ```

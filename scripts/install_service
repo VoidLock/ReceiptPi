@@ -13,7 +13,7 @@ PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python)}"
 SERVICE_NAME="receipt-printer.service"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
 TEMPLATE_PATH="${REPO_DIR}/deploy/receipt-printer.service.template"
-TARGET_DIR="/opt/receipt-printer"
+TARGET_DIR="/opt/RecieptPi"
 
 if [ ! -f "$TEMPLATE_PATH" ]; then
   echo "Template not found: $TEMPLATE_PATH" >&2
@@ -22,7 +22,8 @@ fi
 
 echo "Installing to $TARGET_DIR"
 sudo mkdir -p "$TARGET_DIR"
-sudo rsync -a --delete --exclude ".git" --exclude "venv" "$REPO_DIR/" "$TARGET_DIR/"
+# Keep .git directory for auto-updates, but exclude venv
+sudo rsync -a --delete --exclude "venv" --exclude "__pycache__" "$REPO_DIR/" "$TARGET_DIR/"
 sudo chown -R "$USER_TO_RUN":"$USER_TO_RUN" "$TARGET_DIR"
 
 # Ensure .env exists in target directory
