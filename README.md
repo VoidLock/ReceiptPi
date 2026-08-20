@@ -49,8 +49,8 @@ Ensure the following are installed on your system:
 
 ```bash
 # For Debian/Ubuntu-based systems (e.g., DietPi):
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git rsync
+apt update && apt upgrade -y
+apt install -y python3 python3-pip python3-venv git rsync fonts-dejavu-core
 ```
 
 ## Manual Execution (Temporary Run)
