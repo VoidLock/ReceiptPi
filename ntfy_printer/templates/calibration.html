@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Calibration — ReceiptPi{% endblock %}
+{% block content %}
+<h1>Visual Calibration</h1>
+<p class="subtitle">Drag the sliders and watch the preview update. Save to persist to <span class="mono">.env</span> (applies instantly), or print a physical copy to check real-world alignment.</p>
+
+<div id="banner"></div>
+
+<div class="two-col">
+  <div class="card">
+    <h2>Geometry</h2>
+    <div class="field" style="margin-bottom:1rem;">
+      <label>Preview type</label>
+      <select id="kind">
+        <option value="grid">Calibration grid</option>
+        <option value="align">Alignment test</option>
+      </select>
+    </div>
+
+    <div class="field" style="margin-bottom:0.9rem;">
+      <label>X Offset: <span id="xVal" class="mono">{{ config.X_OFFSET_MM }}</span> mm</label>
+      <input type="range" id="xOffset" min="-20" max="20" step="0.5" value="{{ config.X_OFFSET_MM }}">
+    </div>
+    <div class="field" style="margin-bottom:0.9rem;">
+      <label>Y Offset: <span id="yVal" class="mono">{{ config.Y_OFFSET_MM }}</span> mm</label>
+      <input type="range" id="yOffset" min="-20" max="20" step="0.5" value="{{ config.Y_OFFSET_MM }}">
+    </div>
+    <div class="field" style="margin-bottom:0.9rem;">
+      <label>Safe Margin: <span id="marginVal" class="mono">{{ config.SAFE_MARGIN_MM }}</span> mm</label>
+      <input type="range" id="safeMargin" min="0" max="15" step="0.5" value="{{ config.SAFE_MARGIN_MM }}">
+    </div>
+    <div class="field" style="margin-bottom:0.9rem;">
+      <label>Paper Width: <span id="widthVal" class="mono">{{ config.PAPER_WIDTH_MM }}</span> mm</label>
+      <input type="range" id="paperWidth" min="48" max="112" step="1" value="{{ config.PAPER_WIDTH_MM }}">
+    </div>
+    <div class="field">
+      <label for="maxHeight">Max Receipt Height (mm, blank = unlimited)</label>
+      <input type="text" id="maxHeight" value="{{ config.MAX_HEIGHT_MM or '' }}">
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="saveBtn">💾 Save these values</button>
+      <button class="btn secondary" id="printBtn" {{ '' if have_printer else 'disabled title="No physical printer connected"' }}>🖨️ Print now</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Live preview</h2>
+    <div class="receipt-frame">
+      <img id="previewImg" src="{{ url_for('calibration_preview') }}?kind=grid" alt="Calibration preview">
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const xOffset = document.getElementById('xOffset');
+const yOffset = document.getElementById('yOffset');
+const safeMargin = document.getElementById('safeMargin');
+const paperWidth = document.getElementById('paperWidth');
+const maxHeight = document.getElementById('maxHeight');
+const kindSel = document.getElementById('kind');
+const img = document.getElementById('previewImg');
+const banner = document.getElementById('banner');
+
+function currentParams() {
+  return new URLSearchParams({
+    kind: kindSel.value === 'align' ? 'align' : 'grid',
+    x_offset: xOffset.value,
+    y_offset: yOffset.value,
+    safe_margin: safeMargin.value,
+    paper_width: paperWidth.value,
+  });
+}
+
+let debounceTimer = null;
+function refreshPreview() {
+  document.getElementById('xVal').textContent = xOffset.value;
+  document.getElementById('yVal').textContent = yOffset.value;
+  document.getElementById('marginVal').textContent = safeMargin.value;
+  document.getElementById('widthVal').textContent = paperWidth.value;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    img.src = "{{ url_for('calibration_preview') }}?" + currentParams().toString() + "&t=" + Date.now();
+  }, 150);
+}
+
+[xOffset, yOffset, safeMargin, paperWidth, kindSel].forEach(el => el.addEventListener('input', refreshPreview));
+
+function showBanner(kind, text) {
+  banner.innerHTML = `<div class="banner ${kind}">${text}</div>`;
+  setTimeout(() => { banner.innerHTML = ''; }, 4000);
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const body = new URLSearchParams({
+    x_offset: xOffset.value,
+    y_offset: yOffset.value,
+    safe_margin: safeMargin.value,
+    paper_width: paperWidth.value,
+    max_height: maxHeight.value,
+  });
+  try {
+    const res = await fetch("{{ url_for('calibration_apply') }}", { method: 'POST', body });
+    const data = await res.json();
+    showBanner(data.ok ? 'success' : 'error', data.ok ? 'Saved — applied instantly, no restart needed.' : (data.error || 'Save failed.'));
+  } catch (e) {
+    showBanner('error', 'Save failed: ' + e);
+  }
+});
+
+document.getElementById('printBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('printBtn');
+  btn.disabled = true;
+  btn.textContent = 'Printing…';
+  try {
+    const res = await fetch("{{ url_for('calibration_print') }}", {
+      method: 'POST',
+      body: new URLSearchParams({ kind: kindSel.value === 'align' ? 'align' : 'grid' }),
+    });
+    const data = await res.json();
+    showBanner(data.ok ? 'success' : 'error', data.ok ? 'Sent to printer!' : (data.error || 'Print failed.'));
+  } catch (e) {
+    showBanner('error', 'Print failed: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🖨️ Print now';
+  }
+});
+</script>
+{% endblock %}

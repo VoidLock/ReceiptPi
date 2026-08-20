@@ -26,6 +26,7 @@ This service was designed for:
 * **Configurable logging** with file output for server mode
 * **Graceful shutdown** via `Q` (interactive) or system signals
 * **USB connection retry logic** - automatically recovers from transient USB errors
+* **Optional Web UI** - browser dashboard for live config editing, visual calibration, priority/emoji customization, and test prints (see below)
 
 ### Resource Usage
 
@@ -116,6 +117,10 @@ Configure the service parameters using an `.env` file.
 *   `IMAGE_IMPLS`: Comma-separated list of image implementations to try
 *   `IMAGE_SCALE`: Image scaling factor (default: `2`)
 *   `IMAGE_CONTRAST`: Image contrast enhancement (default: `2.0`)
+*   `WEB_UI_ENABLED`: Enable the browser dashboard - `true` or `false` (default: `false`, see [Web UI](#web-ui))
+*   `WEB_UI_HOST`: Web UI bind address (default: `0.0.0.0`)
+*   `WEB_UI_PORT`: Web UI port (default: `8080`)
+*   `WEB_UI_USERNAME` / `WEB_UI_PASSWORD`: Basic auth credentials for the web UI (strongly recommended)
 
 **Example `.env` file:**
 ```bash
@@ -269,6 +274,33 @@ To remove the service and application:
 chmod +x ./scripts/uninstall_service
 sudo ./scripts/uninstall_service
 ```
+
+## Web UI
+
+ReceiptPi can host an optional browser dashboard directly on the device, so you can tune it from your phone or laptop without SSH.
+
+**What it does:**
+* **Dashboard** - live printer/connection status, memory usage, quick links
+* **Settings** - every `.env` value in one form; geometry, image, phone-QR, memory, and log-level changes apply instantly (no restart), everything else prompts for a restart
+* **Calibration** - drag sliders for X/Y offset, safe margin, and paper width and watch a live preview image update; save instantly or print a physical test grid
+* **Priority & Emoji** - customize the header symbols per priority level, the colors/text/shading of structured priority-alert banners, and the ASCII icon sets used on kanban cards
+* **Emoji** - search the 1500+ built-in tag → emoji map, add your own tag overrides, and edit the ASCII fallback map used for plain-text messages
+* **Test Print** - fire a one-off message straight at the printer, or through your real ntfy topic, without needing another device
+* **Logs** - tail the service log from the browser
+
+**Enable it:**
+```bash
+WEB_UI_ENABLED=true
+WEB_UI_HOST=0.0.0.0
+WEB_UI_PORT=8080
+WEB_UI_USERNAME=admin
+WEB_UI_PASSWORD=choose-a-strong-password
+```
+Restart the service, then visit `http://<device-ip>:8080`.
+
+**⚠️ Security note:** the web UI can rewrite your `.env` file and trigger physical prints. Always set `WEB_UI_USERNAME`/`WEB_UI_PASSWORD` when enabling it — without them it serves an unauthenticated warning banner on every page, since anyone on your network (or beyond, if the port is forwarded) could reconfigure the device. It's disabled by default.
+
+Customizations made from the Priority/Emoji pages are stored in `data/webui_settings.json` alongside your `.env` file; back it up if you want to preserve them across a fresh `install_service` run (regular `git pull` auto-updates leave it untouched).
 
 ## Advanced Features
 

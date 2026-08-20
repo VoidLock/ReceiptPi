@@ -39,17 +39,19 @@ def _send_error_notification(ntfy_url, title, message):
         logging.error("Failed to send error notification: %s", e)
 
 
-def listen(ntfy_url, preview_mode=False, error_notifier=None, server_mode=False):
+def listen(ntfy_url, preview_mode=False, error_notifier=None, server_mode=False, printer=None):
     """Connect to ntfy stream and print incoming messages.
-    
+
     Args:
         ntfy_url (str): Full ntfy SSE URL (e.g., https://ntfy.sh/mytopic/json)
         preview_mode (bool): If True, display images instead of printing
         error_notifier (str): ntfy URL for error notifications (optional)
         server_mode (bool): If True, running as systemd service
+        printer (WhiteboardPrinter): Existing printer instance to reuse (e.g. one
+            already shared with the web UI). A new one is created if omitted.
     """
     global MONITOR, UPDATE_CHECKER
-    wp = WhiteboardPrinter(preview_mode=preview_mode)
+    wp = printer if printer is not None else WhiteboardPrinter(preview_mode=preview_mode)
     
     mode_str = "preview mode" if preview_mode else "printer mode"
     if not server_mode:

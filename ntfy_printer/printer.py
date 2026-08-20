@@ -9,6 +9,7 @@ import time
 import json
 import textwrap
 import gc
+import threading
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance
 from pilmoji import Pilmoji
 from escpos.printer import Usb
@@ -36,6 +37,9 @@ class WhiteboardPrinter:
         self._paused = False
         self.preview_mode = preview_mode
         self.preview_count = 0
+        # Serializes access to the USB device — the ntfy listener and the
+        # web UI (test print / calibration print) can both trigger prints.
+        self.print_lock = threading.Lock()
         if not preview_mode:
             self.connect()
 
@@ -643,9 +647,15 @@ class WhiteboardPrinter:
         if self.is_paused:
             logging.warning("Printer paused due to high memory — dropping message")
             return
+
+        with self.print_lock:
+            self._print_msg_locked(message, subtext=subtext, payload=payload)
+
+    def _print_msg_locked(self, message, subtext=None, payload=None):
+        """Body of print_msg(), run while holding self.print_lock."""
         if not self.p:
             self.connect()
-        
+
         # Detect if message is JSON (structured payload)
         try:
             msg_payload = json.loads(message)

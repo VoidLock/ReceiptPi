@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ReceiptPi{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <span class="dot {% if status is defined %}{% if status.connected %}on{% elif status.paused %}paused{% elif status.preview_mode %}{% else %}off{% endif %}{% endif %}" id="statusDot"></span>
+      🧾 ReceiptPi
+    </div>
+    <nav class="tabs">
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
+      <a href="{{ url_for('config_editor') }}" class="{{ 'active' if active=='config' else '' }}">Settings</a>
+      <a href="{{ url_for('calibration_page') }}" class="{{ 'active' if active=='calibration' else '' }}">Calibration</a>
+      <a href="{{ url_for('priority_page') }}" class="{{ 'active' if active=='priority' else '' }}">Priority</a>
+      <a href="{{ url_for('emoji_page') }}" class="{{ 'active' if active=='emoji' else '' }}">Emoji</a>
+      <a href="{{ url_for('test_print_page') }}" class="{{ 'active' if active=='test-print' else '' }}">Test Print</a>
+      <a href="{{ url_for('logs_page') }}" class="{{ 'active' if active=='logs' else '' }}">Logs</a>
+    </nav>
+  </div>
+  <main>
+    {% block content %}{% endblock %}
+    <p class="footer-note">ReceiptPi Web UI — changes here write to <span class="mono">.env</span> and a local settings file on the device.</p>
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

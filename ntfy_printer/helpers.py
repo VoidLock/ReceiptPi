@@ -92,21 +92,19 @@ def detect_priority(message, payload=None):
 
 def get_priority_symbol(priority_level):
     """Get the alert symbol(s) and count for priority level.
-    
+
+    Reads from config.PRIORITY_SYMBOLS, which is customizable via the web UI
+    (Priority & Emoji page) and hot-reloaded without a restart.
+
     Args:
         priority_level (str): One of ("max", "high", "default", "low", "min")
-        
+
     Returns:
         tuple: (symbol, count) - symbol is emoji str, count is number of repetitions
     """
-    symbols = {
-        "max": ("⚡", 3),      # 3 lightning bolts for max
-        "high": ("⚡", 2),     # 2 lightning bolts for high
-        "default": ("⚡", 1),  # 1 lightning bolt for default
-        "low": ("↓", 1),       # Down arrow for low
-        "min": ("•", 1),       # Bullet for minimal
-    }
-    return symbols.get(priority_level, ("⚡", 1))
+    fallback = config.PRIORITY_SYMBOLS.get("default", {"symbol": "⚡", "count": 1})
+    entry = config.PRIORITY_SYMBOLS.get(priority_level, fallback)
+    return entry.get("symbol", "⚡"), entry.get("count", 1)
 
 
 def draw_priority_banner(draw, x, y, width, height, priority, font, text_color=(0, 0, 0), bg_color=(200, 200, 200)):
@@ -126,34 +124,16 @@ def draw_priority_banner(draw, x, y, width, height, priority, font, text_color=(
     Returns:
         str: The text that was drawn in the banner
     """
-    # Define visual styles per priority
-    styles = {
-        "critical": {
-            "text": "⚠ CRITICAL ⚠",
-            "fill": (255, 100, 100),  # Red
-            "pattern": "heavy",  # Dense shading
-        },
-        "high": {
-            "text": "● HIGH ●",
-            "fill": (255, 180, 100),  # Orange
-            "pattern": "medium",
-        },
-        "medium": {
-            "text": "○ MEDIUM ○",
-            "fill": (255, 255, 100),  # Yellow
-            "pattern": "light",
-        },
-        "low": {
-            "text": "- LOW -",
-            "fill": (200, 255, 200),  # Light green
-            "pattern": "minimal",
-        },
-    }
-    
-    style = styles.get(priority.lower(), styles["medium"])
+    # Visual styles per priority, customizable via config.PRIORITY_BANNER_STYLES
+    # (web UI Priority & Emoji page), hot-reloaded without a restart.
+    styles = config.PRIORITY_BANNER_STYLES
+    default_style = styles.get("medium", {"text": priority.upper(), "fill": (200, 200, 200), "pattern": "light"})
+    style = styles.get(priority.lower(), default_style)
     fill = style["fill"]
+    if not isinstance(fill, tuple):
+        fill = tuple(fill)
     banner_text = style["text"]
-    pattern = style["pattern"]
+    pattern = style.get("pattern", "light")
     
     # Draw background rectangle with border
     border_width = 2

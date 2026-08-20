@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ReceiptPi{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="subtitle">Live status for this ReceiptPi device.</p>
+
+{% if not status.auth_enabled %}
+<div class="banner error">
+  ⚠ The web UI has no username/password set — anyone on your network can reconfigure this device or trigger prints.
+  Set <span class="mono">WEB_UI_USERNAME</span> / <span class="mono">WEB_UI_PASSWORD</span> on the
+  <a href="{{ url_for('config_editor') }}">Settings</a> page and restart the service.
+</div>
+{% endif %}
+
+<div class="grid" id="statGrid">
+  <div class="stat">
+    <div class="label">Printer</div>
+    <div class="value {{ 'good' if status.connected else ('warn' if status.preview_mode else 'bad') }}" id="statPrinter">
+      {% if status.preview_mode %}Preview mode{% elif status.connected %}Connected{% else %}Disconnected{% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="label">Print Queue</div>
+    <div class="value {{ 'bad' if status.paused else 'good' }}" id="statPaused">
+      {{ 'Paused (low memory)' if status.paused else 'Running' }}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="label">Memory Usage</div>
+    <div class="value" id="statMem">{{ status.mem_percent if status.mem_percent is not none else '—' }}{{ '%' if status.mem_percent is not none }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">ntfy Topic</div>
+    <div class="value mono" style="font-size:1rem;" id="statTopic">{{ status.ntfy_topic or '—' }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Auto-Update</div>
+    <div class="value {{ 'good' if status.auto_update else '' }}" id="statAutoUpdate">{{ 'Enabled' if status.auto_update else 'Disabled' }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Version</div>
+    <div class="value mono" style="font-size:1rem;">{{ status.version }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1.25rem;">
+  <h2>Quick actions</h2>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('calibration_page') }}">🎯 Calibrate printout</a>
+    <a class="btn secondary" href="{{ url_for('test_print_page') }}">🖨️ Send test print</a>
+    <a class="btn secondary" href="{{ url_for('priority_page') }}">✨ Customize priority &amp; icons</a>
+    <a class="btn secondary" href="{{ url_for('emoji_page') }}">😀 Browse emoji tags</a>
+    <a class="btn secondary" href="{{ url_for('logs_page') }}">📜 View logs</a>
+  </div>
+</div>
+
+<script>
+async function pollStatus() {
+  try {
+    const res = await fetch("{{ url_for('api_status') }}");
+    if (!res.ok) return;
+    const s = await res.json();
+    const dot = document.getElementById('statusDot');
+    dot.className = 'dot ' + (s.connected ? 'on' : (s.paused ? 'paused' : (s.preview_mode ? '' : 'off')));
+    const printerEl = document.getElementById('statPrinter');
+    printerEl.textContent = s.preview_mode ? 'Preview mode' : (s.connected ? 'Connected' : 'Disconnected');
+    printerEl.className = 'value ' + (s.connected ? 'good' : (s.preview_mode ? 'warn' : 'bad'));
+    const pausedEl = document.getElementById('statPaused');
+    pausedEl.textContent = s.paused ? 'Paused (low memory)' : 'Running';
+    pausedEl.className = 'value ' + (s.paused ? 'bad' : 'good');
+    document.getElementById('statMem').textContent = (s.mem_percent !== null && s.mem_percent !== undefined) ? s.mem_percent + '%' : '—';
+    document.getElementById('statTopic').textContent = s.ntfy_topic || '—';
+  } catch (e) { /* offline briefly, ignore */ }
+}
+setInterval(pollStatus, 5000);
+</script>
+{% endblock %}

@@ -29,6 +29,20 @@ AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "false").lower() == "true"
 UPDATE_CHECK_INTERVAL = int(os.environ.get("UPDATE_CHECK_INTERVAL", "3600"))  # seconds
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "VoidLock/ReceiptPi")
 
+# --- Web UI Configuration ---
+WEB_UI_ENABLED = os.environ.get("WEB_UI_ENABLED", "false").lower() == "true"
+WEB_UI_HOST = os.environ.get("WEB_UI_HOST", "0.0.0.0")
+WEB_UI_PORT = int(os.environ.get("WEB_UI_PORT", "8080"))
+WEB_UI_USERNAME = os.environ.get("WEB_UI_USERNAME", "")
+WEB_UI_PASSWORD = os.environ.get("WEB_UI_PASSWORD", "")
+
+# Directory for web UI managed data (priority/emoji customizations, etc.)
+DATA_DIR = os.environ.get(
+    "DATA_DIR",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"),
+)
+SETTINGS_FILE = os.path.join(DATA_DIR, "webui_settings.json")
+
 # --- USB Printer Configuration ---
 VENDOR_ID = int(os.environ.get("PRINTER_VENDOR", "0x0fe6"), 16)
 PRODUCT_ID = int(os.environ.get("PRINTER_PRODUCT", "0x811e"), 16)
@@ -93,6 +107,26 @@ ICON_TYPE = {
     "monday_task": "[M]",
 }
 
+# --- Priority Header Symbols (used on plain/ntfy message receipts) ---
+# Customizable from the web UI (Priority & Emoji page). Kept as mutable dicts
+# so in-place updates (settings_store.apply) are visible everywhere they're
+# imported without needing a process restart.
+PRIORITY_SYMBOLS = {
+    "max": {"symbol": "⚡", "count": 3},
+    "high": {"symbol": "⚡", "count": 2},
+    "default": {"symbol": "⚡", "count": 1},
+    "low": {"symbol": "↓", "count": 1},
+    "min": {"symbol": "•", "count": 1},
+}
+
+# --- Priority Alert Banner Styles (used by structured "priority_alert" messages) ---
+PRIORITY_BANNER_STYLES = {
+    "critical": {"text": "⚠ CRITICAL ⚠", "fill": [255, 100, 100], "pattern": "heavy"},
+    "high": {"text": "● HIGH ●", "fill": [255, 180, 100], "pattern": "medium"},
+    "medium": {"text": "○ MEDIUM ○", "fill": [255, 255, 100], "pattern": "light"},
+    "low": {"text": "- LOW -", "fill": [200, 255, 200], "pattern": "minimal"},
+}
+
 # Common emoji to text mappings for thermal printer compatibility
 # (used for plain text messages that don't use pilmoji rendering)
 EMOJI_MAP = {
@@ -125,3 +159,12 @@ def setup():
     global STOP_EVENT
     import threading
     STOP_EVENT = threading.Event()
+
+    # Load any web-UI-customized priority symbols / icons / emoji overrides
+    # saved from a previous run (no-op if none exist yet).
+    try:
+        from . import settings_store
+        settings_store.load()
+    except Exception:
+        import logging
+        logging.exception("Failed to load web UI settings; using defaults")

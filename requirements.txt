@@ -6,3 +6,4 @@ psutil
 qrcode[pil]
 pilmoji
 python-dotenv
+Flask

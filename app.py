@@ -305,16 +305,29 @@ def main():
         sys.exit(2)
 
     ntfy_url = f"{args.host.rstrip('/')}/{args.topic}/json"
-    
+
     # Start input listener thread if not in server mode (allows 'Q' to quit)
     if not args.server:
         print(f"👀 Listening to {ntfy_url}")
         print(f"   Press 'Q' then Enter to stop, or Ctrl+C\n")
         input_thread = threading.Thread(target=input_listener, daemon=True)
         input_thread.start()
-    
+
+    # Create the printer up front so it can be shared with the web UI (if enabled)
+    # and the ntfy listener, rather than each opening its own USB connection.
+    wp = WhiteboardPrinter(preview_mode=args.preview)
+
+    web_server = None
+    if config.WEB_UI_ENABLED and not args.preview:
+        try:
+            from ntfy_printer.webui import start_webui
+            web_server = start_webui(wp)
+        except Exception:
+            logging.exception("Failed to start web UI — continuing without it")
+
     try:
-        listen(ntfy_url, preview_mode=args.preview, error_notifier=ERROR_NTFY_TOPIC, server_mode=args.server)
+        listen(ntfy_url, preview_mode=args.preview, error_notifier=ERROR_NTFY_TOPIC,
+               server_mode=args.server, printer=wp)
     except Exception as e:
         error_msg = f"Fatal error in listener: {str(e)}"
         logging.error(error_msg, exc_info=True)
@@ -322,6 +335,9 @@ def main():
             notifier = ErrorNotifier(ERROR_NTFY_TOPIC)
             notifier.send_error("Receipt Printer Error", error_msg)
         sys.exit(1)
+    finally:
+        if web_server:
+            web_server.stop()
 
 
 if __name__ == "__main__":

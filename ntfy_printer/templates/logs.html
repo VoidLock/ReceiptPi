@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Logs — ReceiptPi{% endblock %}
+{% block content %}
+<h1>Logs</h1>
+<p class="subtitle">Last {{ lines|length }} lines of <span class="mono">{{ log_file }}</span>.</p>
+
+{% if lines %}
+<div class="log-view">{% for line in lines %}{{ line }}{% endfor %}</div>
+{% else %}
+<div class="banner info">No log file found yet at <span class="mono">{{ log_file }}</span> — it's created the first time the service runs in <span class="mono">--server</span> mode.</div>
+{% endif %}
+{% endblock %}

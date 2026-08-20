@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Test Print — ReceiptPi{% endblock %}
+{% block content %}
+<h1>Test Print</h1>
+<p class="subtitle">Send a one-off message straight to the printer (or through your real ntfy topic) without needing another device.</p>
+
+{% if result %}
+<div class="banner {{ 'success' if result.ok else 'error' }}">
+  {{ result.detail if result.ok else result.error }}
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post">
+    <div class="field-grid">
+      <div class="field">
+        <label for="title">Title</label>
+        <input type="text" id="title" name="title" placeholder="Optional title">
+      </div>
+      <div class="field">
+        <label for="tags">Tags</label>
+        <input type="text" id="tags" name="tags" placeholder="comma-separated, e.g. fire,warning">
+      </div>
+      <div class="field">
+        <label for="priority">Priority</label>
+        <select id="priority" name="priority">
+          <option value="5">5 — max</option>
+          <option value="4">4 — high</option>
+          <option value="3" selected>3 — default</option>
+          <option value="2">2 — low</option>
+          <option value="1">1 — min</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="click">Click URL / phone number</label>
+        <input type="text" id="click" name="click" placeholder="https://example.com or a phone number">
+      </div>
+    </div>
+    <div class="field" style="margin-top:0.9rem;">
+      <label for="message">Message</label>
+      <textarea id="message" name="message" style="min-height:90px;">This is a test message from the ReceiptPi web UI 🧾</textarea>
+    </div>
+    <div class="checkbox-row" style="margin-top:0.9rem;">
+      <input type="checkbox" id="via_ntfy" name="via_ntfy">
+      <label for="via_ntfy">Send through ntfy instead of printing directly (exercises the full pipeline)</label>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit">🖨️ Send</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

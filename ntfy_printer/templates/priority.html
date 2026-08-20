@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Priority & Icons — ReceiptPi{% endblock %}
+{% block content %}
+<h1>Priority &amp; Emoji Settings</h1>
+<p class="subtitle">Control how urgency shows up on paper: header symbols for plain ntfy messages, the banner style for structured priority alerts, and the ASCII icon sets used on kanban cards.</p>
+
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if request.method == 'POST' and not error %}<div class="banner success">Saved — applied instantly.</div>{% endif %}
+
+<form method="post">
+  <div class="card">
+    <fieldset>
+      <legend>Header symbols (plain ntfy messages, by priority)</legend>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Priority</th><th>Symbol / emoji</th><th>Repeat count</th></tr></thead>
+          <tbody>
+            {% for level in ["max", "high", "default", "low", "min"] %}
+            <tr>
+              <td style="text-transform:capitalize;">{{ level }}</td>
+              <td><input type="text" name="sym_symbol_{{ level }}" value="{{ current.priority_symbols[level].symbol }}" style="width:5rem;"></td>
+              <td><input type="number" name="sym_count_{{ level }}" value="{{ current.priority_symbols[level].count }}" min="1" max="9" style="width:5rem;"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="card">
+    <fieldset>
+      <legend>Priority alert banners (structured "priority_alert" messages)</legend>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Level</th><th>Banner text</th><th>Color</th><th>Shading pattern</th></tr></thead>
+          <tbody>
+            {% for level in ["critical", "high", "medium", "low"] %}
+            <tr>
+              <td style="text-transform:capitalize;">{{ level }}</td>
+              <td><input type="text" name="banner_text_{{ level }}" value="{{ current.priority_banner_styles[level].text }}"></td>
+              <td><input type="color" name="banner_color_{{ level }}" value="{{ banner_colors[level] }}"></td>
+              <td>
+                <select name="banner_pattern_{{ level }}">
+                  {% for p in ["heavy", "medium", "light", "minimal"] %}
+                  <option value="{{ p }}" {{ 'selected' if current.priority_banner_styles[level].pattern == p else '' }}>{{ p }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="card">
+    <fieldset>
+      <legend>Kanban priority tags (ASCII, monday-task cards)</legend>
+      <div class="field-grid">
+        {% for level in ["critical", "high", "medium", "low"] %}
+        <div class="field">
+          <label style="text-transform:capitalize;">{{ level }}</label>
+          <input type="text" name="icon_priority_{{ level }}" value="{{ current.icon_priority.get(level, '') }}">
+        </div>
+        {% endfor %}
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="card">
+    <fieldset>
+      <legend>Advanced: status / type icon sets (raw JSON)</legend>
+      <div class="field-grid">
+        <div class="field">
+          <label for="icon_status_json">Status icons</label>
+          <textarea id="icon_status_json" name="icon_status_json">{{ icon_status_json }}</textarea>
+        </div>
+        <div class="field">
+          <label for="icon_type_json">Type icons</label>
+          <textarea id="icon_type_json" name="icon_type_json">{{ icon_type_json }}</textarea>
+        </div>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="actions">
+    <button class="btn" type="submit">💾 Save priority &amp; icon settings</button>
+  </div>
+</form>
+{% endblock %}
