@@ -28,6 +28,7 @@ LOG_FILE = os.environ.get("LOG_FILE", "/var/log/receipt-printer.log")
 AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "false").lower() == "true"
 UPDATE_CHECK_INTERVAL = int(os.environ.get("UPDATE_CHECK_INTERVAL", "3600"))  # seconds
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "VoidLock/ReceiptPi")
+GIT_BRANCH = os.environ.get("GIT_BRANCH", "main")
 
 # --- Web UI Configuration ---
 WEB_UI_ENABLED = os.environ.get("WEB_UI_ENABLED", "false").lower() == "true"

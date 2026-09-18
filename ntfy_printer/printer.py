@@ -170,10 +170,10 @@ class WhiteboardPrinter:
         left_margin = safe_margin_px + x_offset_px
 
         # Font sizes (title large, message medium)
-        font_main_size = 40
-        font_sub_size = 35
-        font_title_size = 70
-        font_subtext_size = 24
+        font_main_size = 56
+        font_sub_size = 42
+        font_title_size = 80
+        font_subtext_size = 28
 
         try:
             font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_title_size)

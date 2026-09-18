@@ -1,6 +1,8 @@
 """Auto-update checker for receipt printer application.
 
-Checks GitHub for new releases and performs git-based updates.
+Tracks the configured branch on origin (via `git ls-remote`) and pulls
+whenever the remote HEAD moves, rather than relying on GitHub releases/tags
+— this repo is updated by plain pushes to main, not cut releases.
 """
 
 import logging
@@ -64,24 +66,12 @@ class UpdateChecker(threading.Thread):
         self._stop_event.set()
     
     def _get_current_version(self):
-        """Get current git version (tag or commit hash).
-        
+        """Get current git commit hash.
+
         Returns:
-            str: Version string or None if not in git repo
+            str: Short commit hash, or None if not in git repo
         """
         try:
-            # Try to get latest tag
-            result = subprocess.run(
-                ["git", "describe", "--tags", "--abbrev=0"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                cwd=self._get_repo_path()
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-            
-            # Fallback to commit hash
             result = subprocess.run(
                 ["git", "rev-parse", "--short", "HEAD"],
                 capture_output=True,
@@ -93,7 +83,7 @@ class UpdateChecker(threading.Thread):
                 return result.stdout.strip()
         except Exception as e:
             logging.debug(f"Could not get current version: {e}")
-        
+
         return None
     
     def _get_repo_path(self):
@@ -105,72 +95,51 @@ class UpdateChecker(threading.Thread):
         return Path(__file__).parent.parent
     
     def _check_for_updates(self):
-        """Check GitHub for new releases."""
-        logging.debug(f"Checking for updates from {config.GITHUB_REPO}...")
-        
-        # Try latest release first
-        api_url = f"https://api.github.com/repos/{config.GITHUB_REPO}/releases/latest"
-        
+        """Check origin's branch head via `git ls-remote` and pull if it moved."""
+        branch = config.GIT_BRANCH
+        repo_path = self._get_repo_path()
+        logging.debug(f"Checking {config.GITHUB_REPO}@{branch} for updates...")
+
         try:
-            response = requests.get(api_url, timeout=10)
-            
-            if response.status_code == 404:
-                # No releases yet, check tags instead
-                logging.debug("No releases found, checking tags...")
-                self._check_tags_for_updates()
+            remote = subprocess.run(
+                ["git", "ls-remote", "origin", f"refs/heads/{branch}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=repo_path,
+            )
+            if remote.returncode != 0 or not remote.stdout.strip():
+                logging.warning(f"git ls-remote failed: {remote.stderr.strip()}")
                 return
-            
-            response.raise_for_status()
-            latest_release = response.json()
-            latest_version = latest_release.get("tag_name", "").lstrip("v")
-            
-            if not latest_version:
-                logging.warning("No release tag found on GitHub")
+            remote_sha = remote.stdout.split()[0]
+
+            local = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                cwd=repo_path,
+            )
+            if local.returncode != 0:
+                logging.warning(f"git rev-parse HEAD failed: {local.stderr.strip()}")
                 return
-            
-            current_version = (self.current_version or "").lstrip("v")
-            
-            if latest_version != current_version:
-                logging.info(f"New version available: {latest_version} (current: {current_version})")
-                
-                if config.AUTO_UPDATE:
-                    self._perform_update(latest_version)
-                else:
-                    logging.info("Auto-update disabled - skipping update")
+            local_sha = local.stdout.strip()
+
+            if remote_sha == local_sha:
+                logging.debug(f"Already up to date with {branch} ({local_sha[:7]})")
+                return
+
+            logging.info(f"New commits on {branch}: {local_sha[:7]} -> {remote_sha[:7]}")
+            if config.AUTO_UPDATE:
+                self._perform_update(remote_sha[:7])
             else:
-                logging.debug(f"Already on latest version: {latest_version}")
-                
-        except requests.RequestException as e:
-            logging.warning(f"Failed to check GitHub releases: {e}")
-    
-    def _check_tags_for_updates(self):
-        """Check GitHub tags as fallback when no releases exist."""
-        api_url = f"https://api.github.com/repos/{config.GITHUB_REPO}/tags"
-        
-        try:
-            response = requests.get(api_url, timeout=10)
-            response.raise_for_status()
-            tags = response.json()
-            
-            if not tags:
-                logging.debug("No tags found on GitHub")
-                return
-            
-            # Get the latest tag
-            latest_tag = tags[0].get("name", "").lstrip("v")
-            current_version = (self.current_version or "").lstrip("v")
-            
-            if latest_tag and latest_tag != current_version:
-                logging.info(f"New tag available: {latest_tag} (current: {current_version})")
-                
-                if config.AUTO_UPDATE:
-                    self._perform_update(latest_tag)
-            else:
-                logging.debug(f"Already on latest tag: {latest_tag}")
-                
-        except requests.RequestException as e:
-            logging.debug(f"Failed to check GitHub tags: {e}")
-    
+                logging.info("Auto-update disabled - skipping update")
+
+        except subprocess.TimeoutExpired:
+            logging.warning("git ls-remote timed out")
+        except Exception as e:
+            logging.warning(f"Failed to check for updates: {e}")
+
     def _perform_update(self, new_version):
         """Perform git pull and restart service.
         
@@ -199,7 +168,7 @@ class UpdateChecker(threading.Thread):
             # Pull latest changes
             logging.info("Running git pull...")
             result = subprocess.run(
-                ["git", "pull", "origin", "main"],
+                ["git", "pull", "origin", config.GIT_BRANCH],
                 capture_output=True,
                 text=True,
                 timeout=30,

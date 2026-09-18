@@ -138,11 +138,19 @@ mechanism - same near-zero footprint the README already advertises
    AUTO_UPDATE=true
    UPDATE_CHECK_INTERVAL=300     # 5 minutes; a git ls-remote is cheap
    GIT_BRANCH=main
-   GITHUB_REPO=VoidLock/ReceiptPi   # only matters for the release/tag fallback
+   GITHUB_REPO=VoidLock/ReceiptPi   # cosmetic — used only in log lines
    ```
    (300s is a reasonable default for a Pi Zero-class board - it's one
    tiny HTTPS-ish git handshake every 5 minutes, not a persistent
    connection.)
+
+   **Don't hand-edit tracked files directly on the Pi** (e.g. tweaking
+   `printer.py` over SSH to test a calibration change). Auto-update refuses
+   to pull over a dirty working tree — it logs "Working directory has
+   uncommitted changes - skipping update" and does nothing, silently,
+   forever, until someone notices the Pi is stuck on an old commit. Make
+   calibration changes via `.env` (`X_OFFSET_MM`, `Y_OFFSET_MM`, etc.) or
+   push the change to `main` from your dev machine instead.
 
 4. Restart the service so it picks up the new code and env:
    ```bash
@@ -165,10 +173,9 @@ mechanism - same near-zero footprint the README already advertises
 ## Recovering a non-git install
 
 If `/opt/ReceiptPi` isn't a git repo (no `.git` folder - happens if it was
-ever installed from a "Download ZIP" instead of `git clone`), the cheap
-`ls-remote` check can't run and auto-update silently falls back to the
-GitHub releases/tags API (which needs a tagged release to trigger). Fix it
-once:
+ever installed from a "Download ZIP" instead of `git clone`), the
+`ls-remote`/`git pull` update mechanism can't run at all — every check
+fails silently. Fix it once:
 
 ```bash
 sudo systemctl stop receipt-printer
