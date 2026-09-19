@@ -63,14 +63,13 @@ class WhiteboardPrinter:
             print("📸 Preview mode - no printer connection needed")
             return
         
-        last_error = None
         for attempt in range(retries):
             try:
                 if config.PRINTER_PROFILE:
                     self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0, profile=config.PRINTER_PROFILE)
                 else:
                     self.p = Usb(config.VENDOR_ID, config.PRODUCT_ID, 0)
-                
+
                 # detach kernel driver if active
                 try:
                     if self.p.device.is_kernel_driver_active(0):
@@ -78,20 +77,22 @@ class WhiteboardPrinter:
                 except Exception:
                     # device/kernel driver info may not be available on some platforms
                     logging.debug("Could not check/detach kernel driver")
-                
+
                 # Give USB device time to settle after connection
                 time.sleep(0.5)
                 print("🟢 Hardware Linked")
                 return
             except Exception as e:
-                last_error = e
+                self.p = None
                 if attempt < retries - 1:
                     logging.debug(f"Connection attempt {attempt + 1}/{retries} failed, retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
                     continue
-        
-        logging.exception(f"Failed to connect to USB printer after {retries} attempts: {last_error}")
-        self.p = None
+                else:
+                    # Log from inside the except block so exc_info actually
+                    # captures the real traceback (logging.exception() after
+                    # the loop exits has no active exception to report).
+                    logging.error(f"Failed to connect to USB printer after {retries} attempts: {e!r}", exc_info=True)
     
     def is_ready(self):
         """Check if printer is connected and ready.
@@ -704,8 +705,11 @@ class WhiteboardPrinter:
         for attempt in range(max_retries):
             try:
                 if not self.p:
-                    logging.warning("No printer connected — skipping print: %s", message)
-                    return
+                    logging.info("No active printer connection — attempting to reconnect...")
+                    self.connect()
+                    if not self.p:
+                        logging.warning("No printer connected — skipping print: %s", message)
+                        return
                 self.p.hw("INIT")
                 scale = max(1, config.IMAGE_SCALE)
                 
