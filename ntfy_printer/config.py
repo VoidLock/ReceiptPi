@@ -47,7 +47,8 @@ SETTINGS_FILE = os.path.join(DATA_DIR, "webui_settings.json")
 # --- USB Printer Configuration ---
 VENDOR_ID = int(os.environ.get("PRINTER_VENDOR", "0x0fe6"), 16)
 PRODUCT_ID = int(os.environ.get("PRINTER_PRODUCT", "0x811e"), 16)
-PRINTER_PROFILE = os.environ.get("PRINTER_PROFILE")
+_printer_profile_raw = (os.environ.get("PRINTER_PROFILE") or "").strip()
+PRINTER_PROFILE = _printer_profile_raw if _printer_profile_raw.lower() not in ("", "none") else None
 
 # --- Memory Monitoring ---
 MEM_THRESHOLD_PERCENT = int(os.environ.get("MEM_THRESHOLD_PERCENT", "80"))

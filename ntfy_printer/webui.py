@@ -144,7 +144,12 @@ def _current_env_values():
         if key in on_disk and on_disk[key] is not None:
             values[key] = on_disk[key]
         else:
-            values[key] = str(getattr(config, key, ""))
+            # str(None) would render as the literal text "None" in the form
+            # field, and saving the form unchanged then persists that text
+            # to .env — turning an unset optional value into a real one
+            # (e.g. PRINTER_PROFILE="None", which breaks USB printer setup).
+            live_value = getattr(config, key, "")
+            values[key] = "" if live_value is None else str(live_value)
     return values
 
 
